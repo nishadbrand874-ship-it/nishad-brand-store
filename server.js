@@ -30,7 +30,7 @@ app.post('/api/payment/webhook', express.raw({type:'application/json'}), async (
       const entity=payload.payload?.payment?.entity;
       const orderId=entity?.order_id || payload.payload?.order?.entity?.id;
       const paymentId=entity?.id;
-      if(orderId) await q("UPDATE orders SET payment_id=COALESCE(payment_id,$1), payment_verified=true, status=CASE WHEN status='created' THEN 'payment_verified' ELSE status END WHERE order_id=$2",[paymentId||null,orderId]);
+      if(orderId) await fulfill(orderId,paymentId);
     }
     res.send('ok');
   }catch(e){ console.error('Webhook error:',e); res.status(500).send('retry'); }
@@ -83,7 +83,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
   const s=await settings();
   const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   const sold=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='sold'");
-  const orders=await q("SELECT order_id,package_qty,amount_paise,status,payment_id,utr,payment_verified,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
+  const orders=await q("SELECT order_id,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
   const inv=await q("SELECT id,login_id,login_password,extra_data,status,sold_order_id,created_at FROM inventory ORDER BY id DESC LIMIT 500");
   res.json({settings:s,stock:stock.rows[0].count,sold:sold.rows[0].count,orders:orders.rows,inventory:inv.rows});
 });
@@ -109,41 +109,6 @@ app.post('/api/admin/inventory',auth,async(req,res)=>{
 });
 app.delete('/api/admin/inventory/:id',auth,async(req,res)=>{ await q("DELETE FROM inventory WHERE id=$1 AND status='available'",[req.params.id]); res.json({ok:true}); });
 
-
-app.post('/api/order/utr', async (req,res)=>{
-  try{
-    const orderId=String(req.body?.order_id||'').trim();
-    const utr=String(req.body?.utr||'').trim();
-    if(!orderId || !utr) return res.status(400).json({error:'Order ID and UTR are required'});
-    if(utr.length<6 || utr.length>80) return res.status(400).json({error:'Invalid UTR'});
-    const r=await q("UPDATE orders SET utr=$1,status=CASE WHEN status IN ('created','utr_submitted') THEN 'utr_submitted' ELSE status END WHERE order_id=$2 AND status NOT IN ('paid','approved') RETURNING order_id,status,utr",[utr,orderId]);
-    if(!r.rows[0]) return res.status(404).json({error:'Order not found or already processed'});
-    res.json({ok:true,message:'UTR submitted. Waiting for admin approval.'});
-  }catch(e){console.error(e);res.status(500).json({error:'Could not submit UTR'});}
-});
-
-app.post('/api/admin/orders/:orderId/approve',auth,async(req,res)=>{
-  try{
-    const orderId=String(req.params.orderId||'').trim();
-    const r=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
-    if(!r.rows[0]) return res.status(404).json({error:'Order not found'});
-    const o=r.rows[0];
-    if(!o.utr && !o.payment_verified) return res.status(400).json({error:'UTR is required before approval'});
-    await fulfill(orderId,o.payment_id||null);
-    await q("UPDATE orders SET status='approved' WHERE order_id=$1",[orderId]);
-    res.json({ok:true});
-  }catch(e){console.error(e);res.status(500).json({error:e.message||'Approval failed'});}
-});
-
-app.post('/api/admin/orders/:orderId/reject',auth,async(req,res)=>{
-  try{
-    const orderId=String(req.params.orderId||'').trim();
-    const r=await q("UPDATE orders SET status='rejected' WHERE order_id=$1 AND status NOT IN ('paid','approved') RETURNING order_id",[orderId]);
-    if(!r.rows[0]) return res.status(404).json({error:'Order not found or already processed'});
-    res.json({ok:true});
-  }catch(e){res.status(500).json({error:'Reject failed'});}
-});
-
 async function createOrder(req,res){
   const qty=Number(req.body.qty), name=(req.body.name||'').trim(), phone=(req.body.phone||'').trim();
   if(![1,2,5,10,15,20].includes(qty)) return res.status(400).json({error:'Invalid package'});
@@ -159,21 +124,6 @@ async function createOrder(req,res){
   }catch(e){console.error(e);res.status(500).json({error:'Could not create payment order'});}
 }
 app.post('/api/orders',createOrder);
-
-app.post('/api/orders/manual',async(req,res)=>{
-  try{
-    const qty=Number(req.body.qty), name=(req.body.name||'').trim(), phone=(req.body.phone||'').trim();
-    if(![1,2,5,10,15,20].includes(qty)) return res.status(400).json({error:'Invalid package'});
-    const price=Number(await setting('package_'+qty));
-    if(!price) return res.status(400).json({error:'Package not configured'});
-    const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
-    if(count.rows[0].count<qty) return res.status(409).json({error:'Not enough stock'});
-    const orderId='NBMAN'+Date.now()+Math.floor(Math.random()*1000);
-    await q('INSERT INTO orders(order_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6)',[orderId,qty,money(price),'created',name,phone]);
-    res.json({ok:true,orderId,amount:money(price),currency:'INR',qr:await setting('qr_data') || '/payment-qr.png'});
-  }catch(e){console.error(e);res.status(500).json({error:'Could not create order'});}
-});
-
 
 async function fulfill(orderId,paymentId){
   const client=await pool.connect();
@@ -211,18 +161,17 @@ app.post('/api/payment/verify',async(req,res)=>{
     if(payment.order_id!==razorpay_order_id) return res.status(400).json({error:'Payment does not belong to this order'});
     if(Number(payment.amount)!==Number(ord.rows[0].amount_paise) || payment.currency!=='INR') return res.status(400).json({error:'Payment amount mismatch'});
     if(payment.status!=='captured') return res.status(400).json({error:'Payment is not captured yet'});
-    await q("UPDATE orders SET status='payment_verified',payment_id=$1,payment_verified=true WHERE order_id=$2",[razorpay_payment_id,razorpay_order_id]);
-    res.json({ok:true,paymentVerified:true,message:'Payment verified. Submit UTR and wait for admin approval.'});
+    await fulfill(razorpay_order_id,razorpay_payment_id);
+    const result=await getOrderItems(razorpay_order_id);
+    res.json({ok:true,...result});
   }catch(e){console.error('Payment verification error:',e);res.status(500).json({error:'Payment verified but fulfillment is pending; please use UTR check shortly'});}
 });
 
 async function getOrderItems(utrOrOrder){
   const ord=await q('SELECT order_id,status,package_qty,amount_paise,payment_id,utr,created_at FROM orders WHERE order_id=$1 OR utr=$1 OR payment_id=$1 ORDER BY created_at DESC LIMIT 1',[utrOrOrder]);
   if(!ord.rows[0]) return {found:false};
-  const o=ord.rows[0];
-  if(!['paid','approved'].includes(o.status)) return {found:true,pending:true,order:o,items:[]};
-  const items=await q('SELECT i.login_id,i.login_password,i.extra_data FROM order_items oi JOIN inventory i ON i.id=oi.inventory_id WHERE oi.order_id=$1 ORDER BY i.id',[o.order_id]);
-  return {found:true,order:o,items:items.rows};
+  const items=await q('SELECT i.login_id,i.login_password,i.extra_data FROM order_items oi JOIN inventory i ON i.id=oi.inventory_id WHERE oi.order_id=$1 ORDER BY i.id',[ord.rows[0].order_id]);
+  return {found:true,order:ord.rows[0],items:items.rows};
 }
 app.get('/api/order-check/:utr',async(req,res)=>{ try{res.json(await getOrderItems(req.params.utr.trim()));}catch{res.status(500).json({error:'Server error'});} });
 
@@ -231,7 +180,6 @@ app.get('/admin', (req,res)=>res.sendFile(path.join(__dirname,'public','admin.ht
 (async()=>{
   try{
     await q(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
-    await q("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_verified BOOLEAN NOT NULL DEFAULT FALSE");
     app.listen(PORT,()=>console.log(`NISHAD BRAND running on ${PORT}`));
   }catch(e){ console.error('Startup DB error:',e); process.exit(1); }
 })();
