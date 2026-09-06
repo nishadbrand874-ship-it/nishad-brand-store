@@ -36,9 +36,10 @@ app.post('/api/payment/webhook', express.raw({type:'application/json'}), async (
     const payload=JSON.parse(req.body.toString('utf8'));
     if(payload.event==='order.paid' || payload.event==='payment.captured'){
       const entity=payload.payload?.payment?.entity;
-      const orderId=entity?.order_id || payload.payload?.order?.entity?.id;
+      const orderEntity=payload.payload?.order?.entity;
+      const orderId=entity?.order_id || orderEntity?.id;
       const paymentId=entity?.id;
-      if(orderId) await fulfill(orderId,paymentId);
+      if(orderId && paymentId) await fulfill(orderId,paymentId);
     }
     res.send('ok');
   }catch(e){ console.error('Webhook error:',e); res.status(500).send('retry'); }
@@ -151,6 +152,16 @@ async function fulfill(orderId,paymentId){
     const ord=await client.query('SELECT * FROM orders WHERE order_id=$1 FOR UPDATE',[orderId]);
     if(!ord.rows[0]) throw new Error('Order not found');
     if(ord.rows[0].status==='paid') { await client.query('COMMIT'); return; }
+
+    // NEVER release inventory from a client-side callback alone.
+    // Re-check the payment directly with Razorpay before marking the order paid.
+    if(!paymentId) throw new Error('Missing payment id');
+    const payment=await razorpay.payments.fetch(paymentId);
+    if(!payment || payment.order_id!==orderId) throw new Error('Payment does not belong to this order');
+    if(payment.currency!=='INR') throw new Error('Invalid payment currency');
+    if(Number(payment.amount)!==Number(ord.rows[0].amount_paise)) throw new Error('Payment amount mismatch');
+    if(payment.status!=='captured') throw new Error('Payment is not captured');
+
     const items=await client.query("SELECT id,login_id,login_password,extra_data FROM inventory WHERE status='available' ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $1",[ord.rows[0].package_qty]);
     if(items.rows.length<ord.rows[0].package_qty){ await client.query('ROLLBACK'); throw new Error('Insufficient stock at fulfillment'); }
     for(const item of items.rows){

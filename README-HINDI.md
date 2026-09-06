@@ -44,3 +44,10 @@ Verified payment के बाद server Razorpay payment entity से उप�
 - HTTPS अनिवार्य रखें।
 - Webhook duplicate events के लिए fulfillment idempotent है।
 - Payment के बिना ID fulfill नहीं होती।
+
+
+## Fake Payment Protection
+- ID केवल Razorpay से server-side verified/captured payment के बाद release होगी.
+- Order ID, payment ID, signature, amount, currency और captured status server पर दोबारा verify होते हैं.
+- केवल browser में success दिखाने या नकली UTR डालने से ID release नहीं होगी.
+- Live payments के लिए Razorpay LIVE `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` और webhook secret configure करें.
