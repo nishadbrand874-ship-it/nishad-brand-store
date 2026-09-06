@@ -66,7 +66,7 @@ $('payBtn').onclick = async function(){
       // Let Razorpay show the payment methods supported by the user's device.
       // On compatible mobile devices this can surface installed UPI apps / UPI Intent.
       // Desktop can show the available UPI QR flow.
-      method:{upi:true},
+      method:{upi:true,netbanking:true},
       theme:{color:'#2563eb'},
       handler:async function(resp){
         $('payStatus').textContent='Verifying payment…';

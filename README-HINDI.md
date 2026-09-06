@@ -61,4 +61,4 @@ Verified payment के बाद server Razorpay payment entity से उप�
 - Fake/client-side payment से inventory release नहीं होगी; server Razorpay payment को दोबारा verify करता है।
 
 ## Payment methods
-Razorpay Checkout को UPI-only रखा गया है; Card, Netbanking और Wallet को checkout configuration से हटाया गया है.
+Razorpay Checkout में UPI और Netbanking रखे गए हैं; Card और Wallet हटाए गए हैं.
