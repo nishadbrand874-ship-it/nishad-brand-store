@@ -93,3 +93,15 @@ Razorpay Checkout में UPI और Netbanking रखे गए हैं; Ca
 - Server केवल Razorpay के captured UPI payment और exact amount को verify करके inventory ID release करता है.
 - Fake/screenshot/manual UTR/failed payment पर ID release नहीं होती.
 - Razorpay account में UPI QR Codes feature enable होना आवश्यक है.
+
+
+## V15 Fix
+- Buy Now buttons are rendered again; the previous V14 had a missing payment button element which stopped `app.js` before package rendering.
+- Razorpay Checkout script is included.
+- Buy Now opens the secure UPI-only Razorpay flow automatically.
+- Server-side verification remains mandatory before ID release.
+
+## V16 QR-ONLY
+BUY NOW के बाद payment UI में केवल UPI QR presentation रखा गया है।
+Card/Netbanking/Wallet options को frontend से छिपाया गया है।
+Payment verification server-side रहेगी; verified payment के बाद ही ID release होगी।

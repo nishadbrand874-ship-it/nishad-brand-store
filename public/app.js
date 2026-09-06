@@ -46,8 +46,9 @@ function buyCustom(){
 function openPay(qty, price){
   selected = {qty:qty, price:price};
   $('payText').textContent = qty + ' ID package — ₹' + money(price);
-  $('payStatus').innerHTML = '';
+  $('payStatus').innerHTML = 'Opening secure UPI payment…';
   $('modal').classList.remove('hidden');
+  setTimeout(function(){ const b=$('payBtn'); if(b) b.click(); }, 50);
 }
 function closePay(){ $('modal').classList.add('hidden'); }
 $('payBtn').onclick = async function(){

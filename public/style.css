@@ -99,3 +99,11 @@ code{font-size:15px}
   .verify-note{font-size:12px;margin:0 14px 10px}
   .qr-status{font-size:13px;padding:10px 14px 16px}
 }
+
+.customer-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.customer-fields input{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #d8e0ef;border-radius:10px;font-size:14px}.primary{width:100%;border:0;background:#111827;color:#fff;font-weight:700;padding:13px;border-radius:11px;cursor:pointer}.primary:disabled{opacity:.6}@media(max-width:600px){.customer-fields{grid-template-columns:1fr}.qr-box{width:min(92vw,430px)}}
+
+/* V16: QR-only payment presentation */
+.payment-methods, .payment-options, .card-option, .netbanking-option, .wallet-option,
+[data-payment-method="card"], [data-payment-method="netbanking"], [data-payment-method="wallet"] {
+  display:none !important;
+}
