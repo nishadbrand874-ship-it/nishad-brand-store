@@ -74,7 +74,7 @@ function publicSettings(s, stock=0){
     price: Math.round(basePrice * qty * 100) / 100,
     available: stock >= qty
   }));
-  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', pricePerId:basePrice, packages, stock};
+  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock};
 }
 
 app.get('/api/config', async (req,res)=>{
@@ -107,7 +107,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 });
 
 app.post('/api/admin/settings',auth,async(req,res)=>{
-  const allowed=['site_name','whatsapp_number','price_per_id'];
+  const allowed=['site_name','whatsapp_number','price_per_id','news'];
   for(const key of allowed){ if(req.body[key]!==undefined) await q('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',[key,String(req.body[key])]); }
   res.json({ok:true});
 });

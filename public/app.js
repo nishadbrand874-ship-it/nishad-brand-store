@@ -17,14 +17,11 @@ async function init(){
     $('logo').src = config.logo || '/logo.png';
     const qrEl = $('qr'); if (qrEl) qrEl.src = config.qr || '/payment-qr.png';
     $('wa').href = 'https://wa.me/' + String(config.whatsapp || '').replace(/\D/g,'');
+    const newsBar=$('newsBar'), newsText=$('newsText');
+    if(config.news && String(config.news).trim()){ newsText.textContent=config.news; newsBar.classList.remove('hidden'); } else { newsBar.classList.add('hidden'); }
     const box = $('packages');
     const packages = config.packages || [];
     box.classList.remove('hidden');
-    $('stockEmpty').classList.add('hidden');
-    if(!config.stock){
-      $('stockEmpty').classList.remove('hidden');
-      $('stockEmpty').textContent = 'STOCK AVAILABLE NAHI HAI — ADMIN PANEL SE IDs ADD KAREIN';
-    }
     box.innerHTML = packages.map(function(p){
       const disabled = !p.available || !p.price;
       const label = !p.available ? 'Out of Stock' : (!p.price ? 'Price Not Set' : 'Buy Now');

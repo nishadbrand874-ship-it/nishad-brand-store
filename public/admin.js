@@ -13,15 +13,15 @@ async function load(){
   const d=await r.json();
   $('dash').innerHTML='<div class="grid"><div><b>Available</b><h2>'+d.stock+'</h2></div><div><b>Sold</b><h2>'+d.sold+'</h2></div></div>';
   const s=d.settings||{};
-  const keys=['site_name','whatsapp_number','price_per_id'];
-  $('settings').innerHTML='<div class="grid">'+keys.map(function(k){return '<label>'+k+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>';}).join('')+'</div>';
+  const keys=['site_name','whatsapp_number','price_per_id','news'];
+  $('settings').innerHTML='<div class="grid">'+keys.filter(function(k){return k!=="news";}).map(function(k){return '<label>'+k+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>';}).join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows=3 placeholder="Example: आज 10 ID उपलब्ध हैं • नया रेट लागू है">'+esc(s.news||'')+'</textarea></label>';
   $('tables').innerHTML='<h3>Orders</h3>'+table(d.orders,['order_id','package_qty','amount_paise','status','payment_id','utr','customer_name','created_at'])+'<h3>Inventory</h3>'+table(d.inventory,['id','login_id','login_password','status','sold_order_id']);
 }
 function table(rows,keys){
   return '<table><tr>'+keys.map(function(k){return '<th>'+k+'</th>';}).join('')+'</tr>'+(rows||[]).map(function(row){return '<tr>'+keys.map(function(k){return '<td>'+esc(row[k])+'</td>';}).join('')+'</tr>';}).join('')+'</table>';
 }
 async function saveSettings(){
-  const keys=['site_name','whatsapp_number','price_per_id'];
+  const keys=['site_name','whatsapp_number','price_per_id','news'];
   const body={}; keys.forEach(function(k){body[k]=$('s_'+k).value;});
   const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   alert(r.ok?'Saved':'Failed'); load();
