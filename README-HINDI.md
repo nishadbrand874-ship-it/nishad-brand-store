@@ -76,3 +76,11 @@ Razorpay Checkout में UPI और Netbanking रखे गए हैं; Ca
 - Supported mobile devices पर Razorpay UPI Intent के जरिए installed/supported UPI app खोल सकता है.
 - Payment को server Razorpay से order ID, payment ID, amount, currency और captured status के आधार पर verify करता है.
 - Verified captured payment के बिना inventory/ID release नहीं होगी.
+
+## UPI App Redirect + Approval Flow
+- User `Buy Now` के बाद केवल UPI payment flow में जाता है.
+- Supported mobile device पर Razorpay UPI Intent के जरिए उपलब्ध installed UPI app पर redirect कर सकता है.
+- User payment approve/complete करता है.
+- Browser में success दिखना अकेले पर्याप्त नहीं है.
+- Server Razorpay payment/order/amount/currency/captured status verify करने के बाद ही ID release करता है.
+- Failed, fake, cancelled या unverified payment पर ID release नहीं होगी.
