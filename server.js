@@ -12,7 +12,15 @@ const path = require('path');
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 const PORT = process.env.PORT || 3000;
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false } });
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL is not configured. Add the Render PostgreSQL connection string in Environment Variables.');
+  process.exit(1);
+}
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
+  connectionTimeoutMillis: 10000
+});
 const razorpay = new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID || '', key_secret: process.env.RAZORPAY_KEY_SECRET || '' });
 
 // Razorpay webhook MUST receive the raw request body for signature verification.
@@ -40,6 +48,8 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/health', (req,res)=>res.json({ok:true,service:'nishad-brand-store'}));
 
 function auth(req,res,next){
   try {
