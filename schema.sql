@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS orders (
   status TEXT NOT NULL DEFAULT 'created',
   payment_id TEXT,
   utr TEXT,
+  payment_verified BOOLEAN NOT NULL DEFAULT FALSE,
   customer_name TEXT,
   customer_phone TEXT,
   fulfilled_at TIMESTAMPTZ,
