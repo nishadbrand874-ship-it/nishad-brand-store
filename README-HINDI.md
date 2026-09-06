@@ -68,3 +68,11 @@ Razorpay Checkout में UPI और Netbanking रखे गए हैं; Ca
 - Mobile पर compatible होने पर Razorpay UPI Intent के जरिए supported installed UPI apps का विकल्प दिखा सकता है.
 - Website किसी specific app को जबरदस्ती launch नहीं करती; available app/device handling Razorpay और OS करते हैं.
 - Payment के बाद server Razorpay से payment/order/amount/status verify करता है; verified captured payment के बाद ही ID release होती है.
+
+
+## UPI-only QR / Automatic Verification
+- Checkout को केवल UPI block पर land कराया गया है; Card, Wallet और Netbanking नहीं दिखेंगे.
+- Desktop/web पर Razorpay का dynamic UPI QR उपलब्ध होने पर वही payment QR दिखाया जाएगा.
+- Supported mobile devices पर Razorpay UPI Intent के जरिए installed/supported UPI app खोल सकता है.
+- Payment को server Razorpay से order ID, payment ID, amount, currency और captured status के आधार पर verify करता है.
+- Verified captured payment के बिना inventory/ID release नहीं होगी.

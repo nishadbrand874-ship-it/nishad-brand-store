@@ -66,10 +66,23 @@ $('payBtn').onclick = async function(){
       // Let Razorpay show the payment methods supported by the user's device.
       // On compatible mobile devices this can surface installed UPI apps / UPI Intent.
       // Desktop can show the available UPI QR flow.
-      method:{upi:true},
+      // UPI only. Razorpay lands the customer directly in the UPI flow.
+      // On desktop/web, Razorpay can show its dynamic UPI QR.
+      // On supported mobile devices, Razorpay uses the appropriate UPI app/intent flow.
+      method:'upi',
+      config:{
+        display:{
+          blocks:{
+            upi_only:{
+              name:'Pay via UPI',
+              instruments:[{method:'upi'}]
+            }
+          },
+          sequence:['block.upi_only'],
+          preferences:{show_default_blocks:false}
+        }
+      },
       theme:{color:'#2563eb'},
-      // Prefer UPI app/intent when supported by the user's mobile device.
-      // Razorpay decides which installed/supported UPI apps are available.
       handler:async function(resp){
         $('payStatus').textContent='Verifying payment…';
         const vr=await fetch('/api/payment/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(resp)});
