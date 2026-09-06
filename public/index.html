@@ -25,5 +25,15 @@
   <div><p>अपना UTR डालकर purchased ID/status check करें।</p><div class="checkrow"><input id="utr" placeholder="Enter UTR / Payment ID"><button onclick="checkUTR()">Check</button></div><div id="result"></div></div></section>
 </main>
 <a id="wa" class="whatsapp" target="_blank" rel="noopener" aria-label="WhatsApp support"><span>◉</span><small>Help</small></a>
-<footer class="site-footer">NISHAD BRAND • Secure & Verified ID Store</footer><div id="modal" class="modal hidden"><div class="box"><button class="close" onclick="closePay()">×</button><h2>Complete Payment</h2><p id="payText"></p><div class="note"><b>Payment:</b> Pay & Get ID पर क्लिक करने के बाद secure Razorpay Checkout खुलेगा। Razorpay में केवल UPI payment खुलेगा। Desktop पर supported होने पर dynamic UPI QR और mobile पर supported UPI app/intent flow दिखेगा। Payment server से verify होने के बाद ही ID automatic release होगी।</div><input id="custName" placeholder="Name (optional)"><input id="custPhone" placeholder="Mobile (optional)"><button id="payBtn" class="primary">Pay & Get ID</button><div id="payStatus"></div></div></div>
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script><script src="app.js"></script></body></html>
+<footer class="site-footer">NISHAD BRAND • Secure & Verified ID Store</footer><div id="modal" class="modal hidden"><div class="qr-box">
+  <button class="close" onclick="closePay()">×</button>
+  <div class="qr-head"><h2 id="siteNamePay">NISHAD BRAND</h2><div class="pay-title">UPI PAYMENT</div><div id="payText"></div></div>
+  <div id="qrBox" class="qr-area hidden">
+    <div class="scan-title">Scan with any <b>UPI app</b></div>
+    <div class="qr-frame"><img id="qrImage" alt="Secure UPI QR"></div>
+    <div class="upi-apps">GPay&nbsp; • &nbsp;PhonePe&nbsp; • &nbsp;Paytm&nbsp; • &nbsp;BHIM&nbsp; • &nbsp;and more</div>
+  </div>
+  <div class="verify-note">Payment successful होने के बाद server Razorpay से payment verify करेगा। <b>Verified payment के बिना ID release नहीं होगी.</b></div>
+  <div id="payStatus" class="qr-status">Generating secure UPI QR…</div>
+</div></div>
+<script src="app.js"></script></body></html>

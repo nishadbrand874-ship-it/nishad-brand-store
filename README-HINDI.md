@@ -84,3 +84,12 @@ Razorpay Checkout में UPI और Netbanking रखे गए हैं; Ca
 - Browser में success दिखना अकेले पर्याप्त नहीं है.
 - Server Razorpay payment/order/amount/currency/captured status verify करने के बाद ही ID release करता है.
 - Failed, fake, cancelled या unverified payment पर ID release नहीं होगी.
+
+## V14 Dynamic QR Screen
+- Buy Now पर तुरंत compact UPI QR screen खुलती है.
+- QR Razorpay के one-time fixed-amount UPI QR से server पर generate होता है.
+- Customer किसी भी supported UPI app से QR scan करके payment कर सकता है.
+- Browser हर कुछ seconds में server से payment status check करता है.
+- Server केवल Razorpay के captured UPI payment और exact amount को verify करके inventory ID release करता है.
+- Fake/screenshot/manual UTR/failed payment पर ID release नहीं होती.
+- Razorpay account में UPI QR Codes feature enable होना आवश्यक है.

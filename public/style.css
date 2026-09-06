@@ -69,3 +69,33 @@ code{font-size:15px}
 .site-footer{text-align:center;color:#94a3b8;font-size:12px;padding:0 16px 35px}
 @media(max-width:700px){.hero-title{align-items:flex-start;flex-direction:column}.trust-pill{white-space:normal}.header-badge{display:none}}
 @media(max-width:600px){main{max-width:620px;padding:18px 11px 55px}.check{flex-direction:column}.checkrow{flex-direction:column}.site-header{padding:10px 12px}.brand-wrap{gap:9px}.logo-ring{width:46px;height:46px;border-radius:14px}.logo{border-radius:11px}h1{font-size:19px}.site-header p{font-size:11px;margin-top:2px}.hero-title{margin-bottom:14px}.hero-title h2{font-size:22px;margin:10px 0 4px}.hero-title p{font-size:12px}.eyebrow{font-size:9px;padding:6px 8px}.trust-pill{font-size:10px;padding:9px 11px}.grid{grid-template-columns:1fr 1fr;gap:10px}.card{padding:14px;border-radius:15px}.qty{font-size:20px}.price{font-size:19px;margin:6px 0 10px}.buy,.primary{padding:10px 9px;font-size:12px;border-radius:11px}.custom-card{grid-column:1/-1}.customQty{padding:10px;font-size:16px}.news-bar{font-size:12px;padding:9px 11px}.check{padding:15px;margin-top:20px}.whatsapp{width:52px;height:52px;right:12px;bottom:12px}.box{padding:20px;border-radius:18px}}
+
+.qr-box{width:min(520px,94vw);background:#fff;border-radius:22px;box-shadow:0 24px 70px rgba(0,0,0,.32);padding:0;overflow:hidden;position:relative}
+.qr-head{padding:24px 26px 18px;text-align:center;background:linear-gradient(135deg,#f4f7ff,#eef3ff);border-bottom:1px solid #e4e9f5}
+.qr-head h2{margin:0;color:#12213d;font-size:25px}
+.qr-head .pay-title{font-weight:800;color:#1e5be8;margin-top:5px;letter-spacing:.7px}
+.qr-head #payText{margin-top:10px;font-weight:800;font-size:20px;color:#111827}
+.qr-area{padding:26px 20px 18px;text-align:center}
+.scan-title{font-size:24px;line-height:1.2;color:#101828;margin-bottom:18px}
+.qr-frame{display:inline-flex;padding:12px;background:#fff;border:1px solid #dbe4f4;border-radius:18px;box-shadow:0 8px 28px rgba(29,78,216,.12)}
+.qr-frame img{width:min(330px,72vw);height:min(330px,72vw);display:block;image-rendering:auto}
+.upi-apps{margin-top:14px;font-size:15px;font-weight:700;color:#526071}
+.verify-note{margin:0 22px 14px;padding:12px 14px;background:#f7fafc;border-radius:12px;text-align:center;color:#536273;font-size:13px;line-height:1.45}
+.qr-status{padding:14px 20px 20px;text-align:center;color:#2457c5;font-weight:700;min-height:22px}
+.modal{position:fixed;inset:0;background:rgba(7,15,31,.76);display:flex;align-items:center;justify-content:center;padding:18px;z-index:9999}
+.modal.hidden,.qr-area.hidden{display:none}
+.close{position:absolute;right:14px;top:12px;width:38px;height:38px;border:0;border-radius:50%;background:#edf1f7;font-size:25px;cursor:pointer;color:#111827}
+.success{padding:14px;border-radius:12px;background:#ecfdf3;color:#065f46}
+.error{padding:12px;border-radius:10px;background:#fff1f2;color:#b42318}
+@media(max-width:520px){
+  .qr-box{width:min(390px,96vw);border-radius:18px}
+  .qr-head{padding:19px 18px 14px}
+  .qr-head h2{font-size:21px}
+  .qr-head #payText{font-size:18px}
+  .qr-area{padding:20px 12px 12px}
+  .scan-title{font-size:20px}
+  .qr-frame img{width:min(270px,70vw);height:min(270px,70vw)}
+  .upi-apps{font-size:12px}
+  .verify-note{font-size:12px;margin:0 14px 10px}
+  .qr-status{font-size:13px;padding:10px 14px 16px}
+}
