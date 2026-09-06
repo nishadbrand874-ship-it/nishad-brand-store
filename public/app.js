@@ -63,8 +63,11 @@ $('payBtn').onclick = async function(){
       key:d.keyId, amount:d.amount, currency:d.currency, name:config.siteName,
       description:selected.qty + ' ID Package', order_id:d.orderId,
       prefill:{name:$('custName').value,contact:$('custPhone').value},
-      method:{upi:true,card:true,netbanking:true,wallet:true},
-      config:{display:{blocks:{upi_block:{name:'Pay via UPI',instruments:[{method:'upi'}]}},sequence:['block.upi_block'],preferences:{show_default_blocks:true}}},
+      // Let Razorpay show the payment methods supported by the user's device.
+      // On compatible mobile devices this can surface installed UPI apps / UPI Intent.
+      // Desktop can show the available UPI QR flow.
+      method:{upi:true},
+      theme:{color:'#2563eb'},
       handler:async function(resp){
         $('payStatus').textContent='Verifying payment…';
         const vr=await fetch('/api/payment/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(resp)});

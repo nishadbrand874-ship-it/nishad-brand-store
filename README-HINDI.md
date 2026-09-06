@@ -51,3 +51,14 @@ Verified payment के बाद server Razorpay payment entity से उप�
 - Order ID, payment ID, signature, amount, currency और captured status server पर दोबारा verify होते हैं.
 - केवल browser में success दिखाने या नकली UTR डालने से ID release नहीं होगी.
 - Live payments के लिए Razorpay LIVE `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` और webhook secret configure करें.
+
+
+## Live Razorpay / Mobile UPI
+- Checkout अब Razorpay के device-supported payment methods को दिखाने देता है।
+- Compatible mobile पर installed UPI apps / UPI Intent उपलब्ध हो सकता है; desktop पर UPI QR उपलब्ध हो सकता है।
+- `Test Mode` को code/CSS से छिपाना सही समाधान नहीं है। यह Razorpay की environment/key स्थिति से आता है।
+- Production में Render Environment Variables में **LIVE** Razorpay Key ID और Key Secret लगाएँ और Razorpay Dashboard में Live mode की credentials/webhook configuration करें।
+- Fake/client-side payment से inventory release नहीं होगी; server Razorpay payment को दोबारा verify करता है।
+
+## Payment methods
+Razorpay Checkout को UPI-only रखा गया है; Card, Netbanking और Wallet को checkout configuration से हटाया गया है.
