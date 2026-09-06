@@ -43,6 +43,6 @@ INSERT INTO settings(key,value) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO settings(key,value) VALUES
-('package_1','180'),('package_2','360'),('package_5','900'),
+('price_per_id','180'),('package_1','180'),('package_2','360'),('package_5','900'),
 ('package_10','1800'),('package_15','2700'),('package_20','3600')
 ON CONFLICT (key) DO NOTHING;

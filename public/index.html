@@ -1,9 +1,28 @@
 <!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NISHAD BRAND</title><link rel="stylesheet" href="style.css"></head><body>
-<header><img id="logo" class="logo" src="/logo.png"><div><h1 id="siteName">NISHAD BRAND</h1><p>Fast • Secure • Verified ID Store</p></div></header>
+<header class="site-header">
+  <div class="brand-wrap">
+    <div class="logo-ring"><img id="logo" class="logo" src="/logo.png" alt="NISHAD BRAND"></div>
+    <div>
+      <h1 id="siteName">NISHAD BRAND</h1>
+      <p>Fast • Secure • Verified ID Store</p>
+    </div>
+  </div>
+  <div class="header-badge">✓ SECURE STORE</div>
+</header>
 <main>
-<section id="store"><h2>Choose Your ID Package</h2><div id="packages" class="grid"></div><div id="stockEmpty" class="empty hidden">OUT OF STOCK</div></section>
-<section class="check"><h2>UTR / Transaction Check</h2><p>अपना UTR डालकर purchased ID/status check करें।</p><div class="checkrow"><input id="utr" placeholder="Enter UTR / Payment ID"><button onclick="checkUTR()">Check</button></div><div id="result"></div></section>
+<section id="store" class="store-section">
+  <div class="hero-title">
+    <div>
+      <span class="eyebrow">NISHAD BRAND STORE</span>
+      <h2>Choose Your ID Package</h2>
+      <p>Fast checkout • Secure payment • Automatic verification</p>
+    </div>
+    <div class="trust-pill">⚡ INSTANT PROCESSING</div>
+  </div><div id="packages" class="grid"></div><div id="stockEmpty" class="empty hidden">STOCK AVAILABLE NAHI HAI — ADMIN PANEL SE IDs ADD KAREIN</div></section>
+<section class="check">
+  <div class="section-icon">✓</div>
+  <div><p>अपना UTR डालकर purchased ID/status check करें।</p><div class="checkrow"><input id="utr" placeholder="Enter UTR / Payment ID"><button onclick="checkUTR()">Check</button></div><div id="result"></div></div></section>
 </main>
-<a id="wa" class="whatsapp" target="_blank" rel="noopener">◉</a>
-<div id="modal" class="modal hidden"><div class="box"><button class="close" onclick="closePay()">×</button><h2>Complete Payment</h2><p id="payText"></p><div class="qrwrap"><img id="qr" src="/payment-qr.png"></div><div class="note">Secure Razorpay checkout से payment करें। Payment server पर verify होने के बाद ही ID release होगी। नीचे दिया QR केवल reference के लिए है।</div><input id="custName" placeholder="Name (optional)"><input id="custPhone" placeholder="Mobile (optional)"><button id="payBtn" class="primary">Pay & Get ID</button><div id="payStatus"></div></div></div>
+<a id="wa" class="whatsapp" target="_blank" rel="noopener" aria-label="WhatsApp support"><span>◉</span><small>Help</small></a>
+<footer class="site-footer">NISHAD BRAND • Secure & Verified ID Store</footer><div id="modal" class="modal hidden"><div class="box"><button class="close" onclick="closePay()">×</button><h2>Complete Payment</h2><p id="payText"></p><div class="note"><b>Payment:</b> Pay & Get ID पर क्लिक करने के बाद secure Razorpay Checkout खुलेगा। Desktop पर UPI QR और mobile पर UPI app/intent उपलब्ध होने पर Razorpay वही dynamic payment flow दिखाएगा। Payment server से verify होने के बाद ही ID automatic release होगी।</div><input id="custName" placeholder="Name (optional)"><input id="custPhone" placeholder="Mobile (optional)"><button id="payBtn" class="primary">Pay & Get ID</button><div id="payStatus"></div></div></div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script><script src="app.js"></script></body></html>

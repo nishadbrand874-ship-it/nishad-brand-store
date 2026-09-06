@@ -68,12 +68,13 @@ async function q(text, params=[]){ return pool.query(text, params); }
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
 async function settings(){ const r=await q('SELECT key,value FROM settings'); return Object.fromEntries(r.rows.map(x=>[x.key,x.value])); }
 function publicSettings(s, stock=0){
+  const basePrice = Number(s.price_per_id ?? s.package_1 ?? 0);
   const packages = [1,2,5,10,15,20].map(qty=>({
     qty,
-    price:Number(s['package_'+qty]||0),
+    price: Math.round(basePrice * qty * 100) / 100,
     available: stock >= qty
   }));
-  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', packages, stock};
+  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', pricePerId:basePrice, packages, stock};
 }
 
 app.get('/api/config', async (req,res)=>{
@@ -106,7 +107,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 });
 
 app.post('/api/admin/settings',auth,async(req,res)=>{
-  const allowed=['site_name','whatsapp_number','package_1','package_2','package_5','package_10','package_15','package_20'];
+  const allowed=['site_name','whatsapp_number','price_per_id'];
   for(const key of allowed){ if(req.body[key]!==undefined) await q('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',[key,String(req.body[key])]); }
   res.json({ok:true});
 });
@@ -128,8 +129,9 @@ app.delete('/api/admin/inventory/:id',auth,async(req,res)=>{ await q("DELETE FRO
 
 async function createOrder(req,res){
   const qty=Number(req.body.qty), name=(req.body.name||'').trim(), phone=(req.body.phone||'').trim();
-  if(![1,2,5,10,15,20].includes(qty)) return res.status(400).json({error:'Invalid package'});
-  const price=Number(await setting('package_'+qty));
+  if(!Number.isInteger(qty) || qty < 1 || qty > 1000) return res.status(400).json({error:'Quantity must be between 1 and 1000'});
+  const basePrice=Number(await setting('price_per_id') || await setting('package_1'));
+  const price=Math.round(basePrice * qty * 100) / 100;
   if(!price) return res.status(400).json({error:'Package not configured'});
   const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   if(count.rows[0].count<qty) return res.status(409).json({error:'Not enough stock'});
