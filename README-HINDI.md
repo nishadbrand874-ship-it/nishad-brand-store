@@ -62,3 +62,9 @@ Verified payment के बाद server Razorpay payment entity से उप�
 
 ## Payment methods
 Razorpay Checkout में UPI और Netbanking रखे गए हैं; Card और Wallet हटाए गए हैं.
+
+## UPI App / Auto Verification
+- Checkout में केवल UPI enabled है; Netbanking, Card और Wallet disabled हैं.
+- Mobile पर compatible होने पर Razorpay UPI Intent के जरिए supported installed UPI apps का विकल्प दिखा सकता है.
+- Website किसी specific app को जबरदस्ती launch नहीं करती; available app/device handling Razorpay और OS करते हैं.
+- Payment के बाद server Razorpay से payment/order/amount/status verify करता है; verified captured payment के बाद ही ID release होती है.
