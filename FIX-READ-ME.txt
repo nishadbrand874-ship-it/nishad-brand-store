@@ -1,0 +1,3 @@
+Root route is hardened: if public/index.html is missing, server.js serves a built-in storefront fallback.
+For the full UI, keep the public/ folder in the GitHub repository.
+Do not commit .env or Razorpay secrets.
