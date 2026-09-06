@@ -67,17 +67,21 @@ function signToken(){ return jwt.sign({role:'admin'}, process.env.JWT_SECRET, {e
 async function q(text, params=[]){ return pool.query(text, params); }
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
 async function settings(){ const r=await q('SELECT key,value FROM settings'); return Object.fromEntries(r.rows.map(x=>[x.key,x.value])); }
-function publicSettings(s){
-  const packages = [1,2,5,10,15,20].map(qty=>({qty, price:Number(s['package_'+qty]||0)}));
-  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', packages};
+function publicSettings(s, stock=0){
+  const packages = [1,2,5,10,15,20].map(qty=>({
+    qty,
+    price:Number(s['package_'+qty]||0),
+    available: stock >= qty
+  }));
+  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', packages, stock};
 }
 
 app.get('/api/config', async (req,res)=>{
   try {
     const s=await settings();
     const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
-    res.json({...publicSettings(s), stock:stock.rows[0].count});
-  } catch(e){ res.status(500).json({error:'Server error'}); }
+    res.json(publicSettings(s, stock.rows[0].count));
+  } catch(e){ console.error('Config error:',e); res.status(500).json({error:'Server error'}); }
 });
 
 app.post('/api/admin/login', async (req,res)=>{
