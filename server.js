@@ -49,6 +49,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Serve the storefront explicitly at the root URL.
+app.get('/', (req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
+
 app.get('/health', (req,res)=>res.json({ok:true,service:'nishad-brand-store'}));
 
 function auth(req,res,next){
