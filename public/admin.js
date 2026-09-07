@@ -1,12 +1,35 @@
 'use strict';
+let ordersRefreshTimer=null;
+let ordersRefreshBusy=false;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 function toggleMenu(){$('menu').classList.toggle('hidden')}
 function showSection(id){document.querySelectorAll('.section').forEach(x=>x.classList.add('hidden'));$(id).classList.remove('hidden');$('menu').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'});}
-async function login(){const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('user').value,password:$('pass').value})});const d=await r.json();if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();}else $('msg').textContent=d.error||'Login failed';}
+async function login(){const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('user').value,password:$('pass').value})});const d=await r.json();if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}else $('msg').textContent=d.error||'Login failed';}
 async function logout(){await fetch('/api/admin/logout',{method:'POST'});location.reload();}
 function statusBadge(s){const map={payment_received:['PENDING APPROVAL','pending'],approved:['APPROVED','approved'],paid:['APPROVED','approved'],rejected:['REJECTED','rejected'],created:['WAITING PAYMENT','created']};const a=map[s]||[String(s).toUpperCase(), 'created'];return '<span class="badge '+a[1]+'">'+a[0]+'</span>';}
-async function load(){const r=await fetch('/api/admin/dashboard');if(!r.ok){$('panel').classList.add('hidden');$('login').classList.remove('hidden');return;}const d=await r.json();
+function startOrdersAutoRefresh(){
+  if(ordersRefreshTimer) return;
+  ordersRefreshTimer=setInterval(async ()=>{
+    if(ordersRefreshBusy) return;
+    const ordersSection=$('orders');
+    if(!ordersSection || ordersSection.classList.contains('hidden')) return;
+    ordersRefreshBusy=true;
+    try{
+      const r=await fetch('/api/admin/dashboard?ts='+Date.now(),{cache:'no-store'});
+      if(!r.ok) return;
+      const d=await r.json();
+      $('ordersTable').innerHTML=ordersTable(d.orders||[]);
+      $('dash').innerHTML='<div class="stat"><span>Available IDs</span><b>'+d.stock+'</b></div><div class="stat"><span>Sold IDs</span><b>'+d.sold+'</b></div><div class="stat"><span>Pending Approval</span><b>'+(d.orders||[]).filter(x=>x.status==='payment_received').length+'</b></div><div class="stat"><span>Total Orders</span><b>'+(d.orders||[]).length+'</b></div>';
+    }catch(e){ console.warn('Auto refresh:',e); }
+    finally{ ordersRefreshBusy=false; }
+  },3000);
+}
+function stopOrdersAutoRefresh(){
+  if(ordersRefreshTimer){clearInterval(ordersRefreshTimer);ordersRefreshTimer=null;}
+}
+
+async function load(){const r=await fetch('/api/admin/dashboard?ts='+Date.now(),{cache:'no-store'});if(!r.ok){$('panel').classList.add('hidden');$('login').classList.remove('hidden');return;}const d=await r.json();
 $('dash').innerHTML='<div class="stat"><span>Available IDs</span><b>'+d.stock+'</b></div><div class="stat"><span>Sold IDs</span><b>'+d.sold+'</b></div><div class="stat"><span>Pending Approval</span><b>'+(d.orders||[]).filter(x=>x.status==='payment_received').length+'</b></div><div class="stat"><span>Total Orders</span><b>'+(d.orders||[]).length+'</b></div>';
 const s=d.settings||{};$('settings').innerHTML='<div class="gateway-tip">📱 <b>UPI QR:</b> हर order में खरीदी गई ID की संख्या के हिसाब से exact amount वाला UPI QR अपने आप बनेगा. Payment के बाद customer UTR submit करेगा और आप manually approve करेंगे.</div><div class="formgrid">'+[['site_name','Site Name'],['whatsapp_number','WhatsApp Number'],['price_per_id','Price per ID'],['upi_name','UPI Payee Name']].map(([k,l])=>'<label>'+l+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>').join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows="4" placeholder="Store news यहाँ लिखें...">'+esc(s.news||'')+'</textarea></label>';
 $('ordersTable').innerHTML=ordersTable(d.orders||[]);$('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);}
@@ -18,4 +41,4 @@ async function deleteID(id){if(!confirm('Available ID delete karein?'))return;co
 async function addIDs(){const lines=$('ids').value.split('\n').map(x=>x.trim()).filter(Boolean);const items=lines.map(line=>{const p=line.split('|').map(x=>x.trim());return {login_id:p[0],login_password:p[1]||'',extra_data:p.slice(2).join(' | ')};});const r=await fetch('/api/admin/inventory',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});const d=await r.json();alert(r.ok?'IDs added successfully.':d.error||'Failed');if(r.ok){$('ids').value='';load();}}
 async function saveSettings(){const keys=['site_name','whatsapp_number','price_per_id','upi_name','news'];const body={};keys.forEach(k=>body[k]=$('s_'+k).value);const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});alert(r.ok?'Settings saved.':'Failed');if(r.ok)load();}
 $('assets').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/admin/assets',{method:'POST',body:new FormData($('assets'))});alert(r.ok?'Assets uploaded.':'Upload failed');if(r.ok)load();};
-fetch('/api/admin/me').then(r=>{if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();}});
+fetch('/api/admin/me').then(r=>{if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}});
