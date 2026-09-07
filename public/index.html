@@ -32,13 +32,9 @@
     <div class="scan-title">Scan with any <b>UPI app</b></div>
     <div class="qr-frame"><img id="qrImage" alt="Secure UPI QR"></div>
     <div class="upi-apps">GPay&nbsp; • &nbsp;PhonePe&nbsp; • &nbsp;Paytm&nbsp; • &nbsp;BHIM&nbsp; • &nbsp;and more</div>
+    <div class="qr-timer">QR valid for <b id="timer">05:00</b></div>
   </div>
   <div class="verify-note">Payment successful होने के बाद server Razorpay से payment verify करेगा। <b>Verified payment के बिना ID release नहीं होगी.</b></div>
-  <div class="customer-fields">
-    <input id="custName" placeholder="Name (optional)">
-    <input id="custPhone" placeholder="Mobile (optional)" inputmode="numeric">
-  </div>
-  <button id="payBtn" class="primary">Pay & Get ID</button>
-  <div id="payStatus" class="qr-status">Opening secure UPI payment…</div>
+  <div id="payStatus" class="qr-status">QR तैयार हो रहा है…</div>
 </div></div>
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script><script src="app.js"></script></body></html>
+<script src="app.js"></script></body></html>

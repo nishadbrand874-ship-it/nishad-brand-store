@@ -8,6 +8,7 @@ const Razorpay = require('razorpay');
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -23,10 +24,10 @@ const pool = new Pool({
 });
 const razorpay = new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID || '', key_secret: process.env.RAZORPAY_KEY_SECRET || '' });
 
-// Razorpay webhook MUST receive the raw request body for signature verification.
+// Razorpay webhook. QR payments do not carry a Razorpay order_id, so we also
+// resolve them by qr_code_id before fulfilling the matching store order.
 app.post('/api/payment/webhook', express.raw({type:'application/json'}), async (req,res)=>{
   try{
-    const crypto=require('crypto');
     const signature=req.headers['x-razorpay-signature'];
     const secret=process.env.RAZORPAY_WEBHOOK_SECRET || '';
     if(!signature || !secret || !Buffer.isBuffer(req.body)) return res.status(400).send('invalid webhook');
@@ -34,12 +35,20 @@ app.post('/api/payment/webhook', express.raw({type:'application/json'}), async (
     const a=Buffer.from(expected,'utf8'), b=Buffer.from(String(signature),'utf8');
     if(a.length!==b.length || !crypto.timingSafeEqual(a,b)) return res.status(400).send('invalid signature');
     const payload=JSON.parse(req.body.toString('utf8'));
-    if(payload.event==='order.paid' || payload.event==='payment.captured'){
+    if(payload.event==='payment.captured' || payload.event==='order.paid'){
       const entity=payload.payload?.payment?.entity;
-      const orderEntity=payload.payload?.order?.entity;
-      const orderId=entity?.order_id || orderEntity?.id;
       const paymentId=entity?.id;
-      if(orderId && paymentId) await fulfill(orderId,paymentId);
+      const qrCodeId=entity?.qr_code_id;
+      let orderId=entity?.order_id || payload.payload?.order?.entity?.id;
+      if(!orderId && qrCodeId){
+        const r=await q('SELECT order_id FROM orders WHERE qr_code_id=$1 LIMIT 1',[qrCodeId]);
+        orderId=r.rows[0]?.order_id;
+      }
+      if(orderId && paymentId){
+        const ord=await q('SELECT qr_code_id FROM orders WHERE order_id=$1',[orderId]);
+        if(ord.rows[0]?.qr_code_id) await fulfillQr(orderId,paymentId,qrCodeId);
+        else await fulfill(orderId,paymentId);
+      }
     }
     res.send('ok');
   }catch(e){ console.error('Webhook error:',e); res.status(500).send('retry'); }
@@ -128,6 +137,24 @@ app.post('/api/admin/inventory',auth,async(req,res)=>{
 });
 app.delete('/api/admin/inventory/:id',auth,async(req,res)=>{ await q("DELETE FROM inventory WHERE id=$1 AND status='available'",[req.params.id]); res.json({ok:true}); });
 
+async function razorpayApi(pathname, options={}){
+  const keyId=process.env.RAZORPAY_KEY_ID || '';
+  const keySecret=process.env.RAZORPAY_KEY_SECRET || '';
+  if(!keyId || !keySecret) throw new Error('Payment gateway is not configured yet');
+  const auth=Buffer.from(keyId+':'+keySecret).toString('base64');
+  const response=await fetch('https://api.razorpay.com/v1'+pathname,{
+    ...options,
+    headers:{'Authorization':'Basic '+auth,'Content-Type':'application/json',...(options.headers||{})}
+  });
+  const text=await response.text();
+  let data={}; try{ data=text?JSON.parse(text):{}; }catch{ data={error:{description:text}}; }
+  if(!response.ok){
+    const msg=data?.error?.description || data?.error?.code || 'Razorpay API request failed';
+    throw new Error(msg);
+  }
+  return data;
+}
+
 async function createOrder(req,res){
   const qty=Number(req.body.qty), name=(req.body.name||'').trim(), phone=(req.body.phone||'').trim();
   if(!Number.isInteger(qty) || qty < 1 || qty > 1000) return res.status(400).json({error:'Quantity must be between 1 and 1000'});
@@ -136,14 +163,81 @@ async function createOrder(req,res){
   if(!price) return res.status(400).json({error:'Package not configured'});
   const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   if(count.rows[0].count<qty) return res.status(409).json({error:'Not enough stock'});
-  if(!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) return res.status(503).json({error:'Payment gateway is not configured yet'});
   try{
-    const rpOrder=await razorpay.orders.create({amount:money(price),currency:'INR',receipt:'NB'+Date.now()+Math.floor(Math.random()*1000),notes:{package_qty:String(qty)}});
-    await q('INSERT INTO orders(order_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6)',[rpOrder.id,qty,money(price),'created',name,phone]);
-    res.json({orderId:rpOrder.id,amount:money(price),currency:'INR',keyId:process.env.RAZORPAY_KEY_ID});
-  }catch(e){console.error(e);res.status(500).json({error:'Could not create payment order'});}
+    // Create our own order reference first. A QR payment is not a Razorpay Checkout order.
+    const orderId='NB'+Date.now()+Math.floor(Math.random()*100000);
+    const closeBy=Math.floor(Date.now()/1000)+300; // 5 minutes
+    const qr=await razorpayApi('/payments/qr_codes',{
+      method:'POST',
+      body:JSON.stringify({
+        type:'upi_qr',
+        name:'NISHAD BRAND',
+        usage:'single_use',
+        fixed_amount:true,
+        payment_amount:money(price),
+        description:'NISHAD BRAND - '+qty+' ID package',
+        close_by:closeBy,
+        notes:{order_id:orderId,package_qty:String(qty)}
+      })
+    });
+    if(!qr.id || !qr.image_url) throw new Error('Razorpay did not return a QR image. Enable UPI QR Codes API on your account.');
+    await q('INSERT INTO orders(order_id,qr_code_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7)',[orderId,qr.id,qty,money(price),'created',name,phone]);
+    res.json({orderId,qrId:qr.id,qrImage:qr.image_url,amount:money(price),currency:'INR',expiresAt:closeBy*1000});
+  }catch(e){console.error('QR create error:',e);res.status(500).json({error:e.message || 'Could not create payment QR'});}
 }
 app.post('/api/orders',createOrder);
+
+async function fulfillQr(orderId,paymentId,qrCodeId){
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const ord=await client.query('SELECT * FROM orders WHERE order_id=$1 FOR UPDATE',[orderId]);
+    if(!ord.rows[0]) throw new Error('Order not found');
+    if(ord.rows[0].status==='paid'){ await client.query('COMMIT'); return; }
+    if(!paymentId) throw new Error('Missing payment id');
+    if(qrCodeId && ord.rows[0].qr_code_id!==qrCodeId) throw new Error('QR code does not belong to this order');
+    const payment=await razorpay.payments.fetch(paymentId);
+    if(!payment) throw new Error('Payment not found');
+    if(payment.currency!=='INR') throw new Error('Invalid payment currency');
+    if(Number(payment.amount)!==Number(ord.rows[0].amount_paise)) throw new Error('Payment amount mismatch');
+    if(payment.status!=='captured') throw new Error('Payment is not captured');
+    if(payment.qr_code_id && payment.qr_code_id!==ord.rows[0].qr_code_id) throw new Error('Payment QR mismatch');
+    const items=await client.query("SELECT id,login_id,login_password,extra_data FROM inventory WHERE status='available' ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $1",[ord.rows[0].package_qty]);
+    if(items.rows.length<ord.rows[0].package_qty){ await client.query('ROLLBACK'); throw new Error('Insufficient stock at fulfillment'); }
+    for(const item of items.rows){
+      await client.query("UPDATE inventory SET status='sold',sold_order_id=$1,reserved_order_id=NULL WHERE id=$2",[orderId,item.id]);
+      await client.query('INSERT INTO order_items(order_id,inventory_id) VALUES($1,$2)',[orderId,item.id]);
+    }
+    const utr=payment?.acquirer_data?.rrn || payment?.acquirer_data?.bank_transaction_id || null;
+    await client.query("UPDATE orders SET status='paid',payment_id=$1,utr=$2,fulfilled_at=NOW() WHERE order_id=$3",[paymentId,utr,orderId]);
+    await client.query('COMMIT');
+  }catch(e){try{await client.query('ROLLBACK')}catch{};throw e;}finally{client.release();}
+}
+
+async function getQrPayments(qrId){
+  const data=await razorpayApi('/payments/qr_codes/'+encodeURIComponent(qrId)+'/payments?count=20',{method:'GET'});
+  return Array.isArray(data.items)?data.items:[];
+}
+
+app.get('/api/payment/qr-status/:orderId',async(req,res)=>{
+  try{
+    const ord=await q('SELECT * FROM orders WHERE order_id=$1',[req.params.orderId]);
+    if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
+    const order=ord.rows[0];
+    if(order.status==='paid') return res.json({status:'paid',...await getOrderItems(order.order_id)});
+    if(!order.qr_code_id) return res.status(400).json({error:'QR order not found'});
+    const qr=await razorpayApi('/payments/qr_codes/'+encodeURIComponent(order.qr_code_id),{method:'GET'});
+    const now=Date.now();
+    const expired=(qr.close_by && now>Number(qr.close_by)*1000) || qr.status==='closed';
+    const payments=await getQrPayments(order.qr_code_id);
+    const payment=payments.find(p=>p.status==='captured' && Number(p.amount)===Number(order.amount_paise) && p.currency==='INR');
+    if(payment){
+      await fulfillQr(order.order_id,payment.id,order.qr_code_id);
+      return res.json({status:'paid',...await getOrderItems(order.order_id)});
+    }
+    res.json({status:expired?'expired':'pending',expiresAt:qr.close_by?Number(qr.close_by)*1000:null});
+  }catch(e){console.error('QR status error:',e);res.status(500).json({error:e.message||'Could not check payment'});}
+});
 
 async function fulfill(orderId,paymentId){
   const client=await pool.connect();
@@ -175,27 +269,7 @@ async function fulfill(orderId,paymentId){
   }catch(e){ try{await client.query('ROLLBACK')}catch{}; throw e; } finally{client.release();}
 }
 
-app.post('/api/payment/verify',async(req,res)=>{
-  const {razorpay_order_id,razorpay_payment_id,razorpay_signature}=req.body||{};
-  if(!razorpay_order_id||!razorpay_payment_id||!razorpay_signature) return res.status(400).json({error:'Missing payment data'});
-  const crypto=require('crypto');
-  const secret=process.env.RAZORPAY_KEY_SECRET || '';
-  if(!secret) return res.status(503).json({error:'Payment gateway is not configured'});
-  const expected=crypto.createHmac('sha256',secret).update(razorpay_order_id+'|'+razorpay_payment_id).digest('hex');
-  const a=Buffer.from(expected,'utf8'), b=Buffer.from(String(razorpay_signature),'utf8');
-  if(a.length!==b.length || !crypto.timingSafeEqual(a,b)) return res.status(400).json({error:'Payment signature verification failed'});
-  try{
-    const ord=await q('SELECT * FROM orders WHERE order_id=$1',[razorpay_order_id]);
-    if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
-    const payment=await razorpay.payments.fetch(razorpay_payment_id);
-    if(payment.order_id!==razorpay_order_id) return res.status(400).json({error:'Payment does not belong to this order'});
-    if(Number(payment.amount)!==Number(ord.rows[0].amount_paise) || payment.currency!=='INR') return res.status(400).json({error:'Payment amount mismatch'});
-    if(payment.status!=='captured') return res.status(400).json({error:'Payment is not captured yet'});
-    await fulfill(razorpay_order_id,razorpay_payment_id);
-    const result=await getOrderItems(razorpay_order_id);
-    res.json({ok:true,...result});
-  }catch(e){console.error('Payment verification error:',e);res.status(500).json({error:'Payment verified but fulfillment is pending; please use UTR check shortly'});}
-});
+app.post('/api/payment/verify',async(req,res)=>res.status(410).json({error:'Checkout verification is disabled. Please pay using the QR shown on screen.'}));
 
 async function getOrderItems(utrOrOrder){
   const ord=await q('SELECT order_id,status,package_qty,amount_paise,payment_id,utr,created_at FROM orders WHERE order_id=$1 OR utr=$1 OR payment_id=$1 ORDER BY created_at DESC LIMIT 1',[utrOrOrder]);

@@ -107,3 +107,4 @@ code{font-size:15px}
 [data-payment-method="card"], [data-payment-method="netbanking"], [data-payment-method="wallet"] {
   display:none !important;
 }
+.qr-timer{margin-top:12px;text-align:center;font-size:16px;color:#1f2937}.qr-timer b{font-variant-numeric:tabular-nums;color:#dc2626}
