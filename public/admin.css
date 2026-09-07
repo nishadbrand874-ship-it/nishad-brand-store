@@ -16,3 +16,28 @@ body{background:radial-gradient(circle at 10% 0%,rgba(59,130,246,.28),transparen
 .stat{position:relative;overflow:hidden}.stat:after{content:"";position:absolute;right:-25px;top:-25px;width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,rgba(59,130,246,.16),rgba(6,182,212,.04))}
 .approve{background:linear-gradient(135deg,#059669,#10b981)!important}.reject{background:linear-gradient(135deg,#fff1f2,#fee2e2)!important}
 
+
+/* ===== V32 DASHBOARD + LOGIN REDESIGN ===== */
+.stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.stat{min-height:112px;padding:17px 18px;border-radius:18px;transition:transform .18s ease,box-shadow .18s ease;border:1px solid #d6e4f4!important}
+.stat:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(15,23,42,.10)}
+.stat span{font-size:12px;font-weight:900;letter-spacing:.1px}
+.stat b{font-size:30px;line-height:1.05;margin-top:7px}
+.stat small{display:block;margin-top:6px;color:#64748b;font-size:10px;font-weight:700}
+.stat.today-sold{background:linear-gradient(135deg,#eff6ff,#dbeafe)!important}
+.stat.today-added{background:linear-gradient(135deg,#ecfdf5,#d1fae5)!important}
+.stat.today-rejected{background:linear-gradient(135deg,#fff1f2,#ffe4e6)!important}
+.stat.today-approved{background:linear-gradient(135deg,#f0fdf4,#dcfce7)!important}
+.login-panel{max-width:470px!important;padding:32px!important;border-radius:26px!important;background:rgba(255,255,255,.96)!important;box-shadow:0 24px 70px rgba(15,23,42,.16)!important}
+.login-brand{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:18px}
+.login-brand img{width:64px;height:64px;border-radius:18px;object-fit:cover;background:#fff;border:2px solid #dbeafe;box-shadow:0 8px 20px rgba(37,99,235,.15)}
+.login-brand b{display:block;text-align:left;font-size:21px;color:#102044;letter-spacing:.2px}
+.login-brand span{display:block;text-align:left;color:#2563eb;font-size:10px;font-weight:900;letter-spacing:1.2px;margin-top:3px}
+.login-pill{display:inline-block;padding:7px 11px;border-radius:999px;background:linear-gradient(135deg,#eff6ff,#ecfeff);border:1px solid #bfdbfe;color:#1d4ed8;font-size:10px;font-weight:900;letter-spacing:.8px}
+.login-panel h1{font-size:29px;margin:14px 0 5px}
+.login-panel p{font-size:13px;margin-bottom:18px}
+.login-form label{text-align:left;display:block;font-size:12px;font-weight:900;color:#334155;margin-top:10px}
+.login-form input{margin:6px 0 0!important;height:46px!important;border-radius:13px!important}
+.login-submit{height:46px;width:100%;margin-top:12px!important;font-size:14px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.stats{grid-template-columns:1fr 1fr;gap:9px}.stat{min-height:92px;padding:12px}.stat b{font-size:24px}.stat small{font-size:9px}.login-panel{padding:22px!important}.login-brand img{width:56px;height:56px}.login-brand b{font-size:18px}}
