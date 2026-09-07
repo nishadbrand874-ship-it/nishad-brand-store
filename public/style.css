@@ -259,3 +259,168 @@ body:after{width:360px;height:360px;right:-150px;bottom:5%;background:radial-gra
   transition:transform .18s ease,filter .18s ease;
 }
 .qr-download:hover{transform:translateY(-1px);filter:brightness(1.06)}
+
+/* NISHAD BRAND — compact QR payment popup */
+.pay-modal{
+  width:min(380px,92vw) !important;
+  max-height:88vh !important;
+  overflow-y:auto !important;
+}
+.pay-modal .pay-head{
+  padding:12px 16px !important;
+}
+.pay-modal .pay-head h2{
+  margin:0 0 3px !important;
+  font-size:21px !important;
+}
+.pay-modal .pay-head .pay-sub{
+  font-size:13px !important;
+}
+.pay-modal .pay-body{
+  padding:10px 14px 14px !important;
+}
+.pay-modal .qr-frame{
+  width:min(230px,68vw) !important;
+  height:min(230px,68vw) !important;
+  margin:7px auto !important;
+}
+.pay-modal #qrImage{
+  max-width:100% !important;
+  max-height:100% !important;
+}
+.pay-modal .qr-download{
+  margin:7px 0 !important;
+  padding:9px 12px !important;
+}
+.pay-modal .upi-open{
+  margin:6px auto !important;
+  padding:8px 12px !important;
+  font-size:13px !important;
+}
+.pay-modal .pay-note{
+  margin:7px 0 !important;
+  padding:8px 10px !important;
+  font-size:12px !important;
+  line-height:1.35 !important;
+}
+.pay-modal .utr-box{
+  padding:8px !important;
+}
+.pay-modal input{
+  height:42px !important;
+  padding:8px 11px !important;
+}
+.pay-modal button{
+  min-height:42px !important;
+}
+@media (max-width:520px){
+  .pay-modal{
+    width:calc(100vw - 24px) !important;
+    max-height:90vh !important;
+  }
+  .pay-modal .qr-frame{
+    width:205px !important;
+    height:205px !important;
+  }
+}
+
+/* Generic compact modal fallback */
+.modal-content{
+  max-height:88vh !important;
+  overflow-y:auto !important;
+}
+
+/* NISHAD BRAND — extra compact mobile payment popup */
+@media (max-width:600px){
+  .modal{
+    padding:8px !important;
+  }
+  .qr-box{
+    width:calc(100vw - 24px) !important;
+    max-width:330px !important;
+    max-height:calc(100vh - 18px) !important;
+    overflow-y:auto !important;
+    border-radius:16px !important;
+  }
+  .qr-head{
+    padding:9px 12px !important;
+  }
+  .qr-head h2{
+    font-size:18px !important;
+    margin:0 0 2px !important;
+  }
+  .pay-title{
+    font-size:12px !important;
+  }
+  #payText{
+    font-size:16px !important;
+    margin-top:3px !important;
+  }
+  .qr-area{
+    padding:7px 10px 4px !important;
+  }
+  .scan-title{
+    font-size:15px !important;
+    margin:2px 0 5px !important;
+  }
+  .qr-frame{
+    padding:6px !important;
+    border-radius:12px !important;
+    margin:4px auto !important;
+  }
+  .qr-frame img{
+    width:170px !important;
+    height:170px !important;
+  }
+  .qr-download{
+    margin:5px 0 !important;
+    padding:8px 10px !important;
+    font-size:13px !important;
+    border-radius:10px !important;
+  }
+  .upi-apps{
+    font-size:10px !important;
+    margin:3px 0 !important;
+  }
+  .upi-open{
+    padding:7px 10px !important;
+    font-size:12px !important;
+    margin:4px auto !important;
+  }
+  .qr-timer{
+    font-size:11px !important;
+    margin:3px 0 !important;
+  }
+  .verify-note{
+    margin:5px 9px !important;
+    padding:7px 8px !important;
+    font-size:10.5px !important;
+    line-height:1.3 !important;
+    border-radius:10px !important;
+  }
+  .utr-box{
+    margin:5px 9px !important;
+    padding:6px !important;
+    border-radius:11px !important;
+  }
+  .utr-box input{
+    height:38px !important;
+    font-size:13px !important;
+  }
+  .utr-box button{
+    min-height:38px !important;
+    font-size:13px !important;
+    margin-top:5px !important;
+  }
+  .qr-status{
+    padding:5px 8px !important;
+    font-size:11px !important;
+  }
+  .close{
+    width:30px !important;
+    height:30px !important;
+    font-size:22px !important;
+    top:6px !important;
+    right:6px !important;
+  }
+}
