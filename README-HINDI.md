@@ -116,3 +116,9 @@ IMPORTANT: This is a static QR image. Automatic payment verification and ID rele
 - Razorpay QR payment captured होने पर webhook/polling order को `payment_received` करता है; Admin approval के बाद ही inventory release होती है.
 - Live collection के लिए Razorpay LIVE keys और सही webhook secret लगाएँ. Test keys से real-money collection नहीं होगी.
 - UPI_VPA अब primary requirement नहीं है; यह fallback के रूप में रखा गया है.
+
+
+## V26 payment fix
+- Razorpay Dynamic QR request uses the documented `upi_qr` type.
+- If Razorpay QR Codes API is not enabled for the account, checkout automatically falls back to the Admin-configured UPI VPA with the exact amount embedded in the UPI link/QR.
+- Therefore the raw `The requested URL was not found on the server.` message is no longer shown to the customer.

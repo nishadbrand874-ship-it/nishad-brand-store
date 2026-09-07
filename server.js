@@ -194,28 +194,38 @@ async function createOrder(req,res){
     let qrImage='', upiLink='', qrCodeId=null;
 
     if(keyId && keySecret){
-      const closeBy=Math.floor(Date.now()/1000)+300;
-      const qr=await razorpayApi('/payments/qr_codes',{
-        method:'POST',
-        body:JSON.stringify({
-          type:'upi',
-          name:'NISHAD BRAND',
-          usage:'single_use',
-          fixed_amount:true,
-          payment_amount:amountPaise,
-          description:orderId,
-          close_by:closeBy
-        })
-      });
-      qrCodeId=qr.id || null;
-      qrImage=qr.image_url || '';
-      if(!qrImage) throw new Error('Razorpay did not return a QR image');
-      upiLink=qr.upi_link || qr.upi_link_url || '';
-    } else {
-      // Safe fallback for installations using a direct UPI VPA.
+      try {
+        // Razorpay Dynamic UPI QR. This endpoint is an on-demand feature on some accounts.
+        // Use the documented type=upi_qr (not type=upi).
+        const closeBy=Math.floor(Date.now()/1000)+300;
+        const qr=await razorpayApi('/payments/qr_codes',{
+          method:'POST',
+          body:JSON.stringify({
+            type:'upi_qr',
+            name:'NISHAD BRAND',
+            usage:'single_use',
+            fixed_amount:true,
+            payment_amount:amountPaise,
+            description:orderId,
+            close_by:closeBy
+          })
+        });
+        qrCodeId=qr.id || null;
+        qrImage=qr.image_url || '';
+        if(!qrImage) throw new Error('Razorpay did not return a QR image');
+        upiLink=qr.upi_link || qr.upi_link_url || '';
+      } catch (e) {
+        // If QR Codes are not enabled on this Razorpay account, fall back to the
+        // merchant VPA so checkout still works instead of showing a raw 404 error.
+        console.warn('Razorpay Dynamic QR unavailable, using VPA fallback:', e.message);
+        qrCodeId=null;
+      }
+    }
+
+    if(!qrImage){
       const vpa=(await setting('upi_vpa')).trim() || String(process.env.UPI_VPA||'').trim();
       const payeeName=(await setting('upi_name')).trim() || String(process.env.UPI_NAME||'NISHAD BRAND').trim() || 'NISHAD BRAND';
-      if(!vpa) return res.status(503).json({error:'Payment gateway is not configured. Add Razorpay LIVE keys (recommended) or UPI ID / VPA in Admin → Store Settings.'});
+      if(!vpa) return res.status(503).json({error:'UPI payment is not configured. Admin Panel → Store Settings में अपना UPI ID / VPA डालें. Razorpay Dynamic QR भी तभी चलेगा जब आपके Razorpay account में QR Codes API enabled हो.'});
       upiLink='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payeeName)+'&am='+encodeURIComponent(price.toFixed(2))+'&cu=INR&tn='+encodeURIComponent(orderId);
       qrImage=await QRCode.toDataURL(upiLink,{width:420,margin:2,errorCorrectionLevel:'M'});
     }
