@@ -19,16 +19,31 @@ async function init(){
 function updateCustomTotal(){const el=$('customQty'),total=$('customTotal');if(!el||!total||!config)return;let qty=Math.floor(Number(el.value)||1);qty=Math.max(1,Math.min(Number(config.stock||1),qty));el.value=qty;total.textContent='₹'+money(Number(config.pricePerId||0)*qty);}
 function buyCustom(){const qty=Math.floor(Number($('customQty')?.value)||0);if(!qty||qty<1||qty>Number(config.stock||0))return;openPay(qty,Number(config.pricePerId||0)*qty);}
 function openPay(qty,price){selected={qty,price};$('payText').textContent=qty+' ID package — ₹'+money(price);$('qrBox').classList.add('hidden');$('payStatus').textContent='QR तैयार हो रहा है…';$('modal').classList.remove('hidden');startQrPayment();}
-function closePay(){stopPolling();$('modal').classList.add('hidden');}
+function closePay(){stopPolling();$('modal').classList.add('hidden');$('utrBox').classList.add('hidden');$('utrInput').value='';}
 async function startQrPayment(){
   stopPolling();
   try{
     const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qty:selected.qty,name:'',phone:''})});
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'QR create failed');
-    $('qrImage').src=d.qrImage; $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>Scan this QR with any UPI app</b><br>Payment ke baad verification automatically hogi.';
+    $('qrImage').src=d.qrImage; $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR scan karke payment karein</b><br>Payment ke baad neeche UTR डालकर Submit करें.'; $('utrBox').classList.remove('hidden');
     startCountdown(Number(d.expiresAt||Date.now()+300000));
-    pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000); await checkQrStatus(d.orderId);
+    window.currentOrderId=d.orderId; pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000); await checkQrStatus(d.orderId);
   }catch(e){$('payStatus').innerHTML='<div class="error">'+esc(e.message)+'</div>';}
+}
+async function submitUTR(){
+  const utr=$('utrInput').value.trim();
+  if(!utr){$('utrMsg').innerHTML='<div class="error">UTR / Transaction ID डालें.</div>';return;}
+  const orderId=window.currentOrderId;
+  if(!orderId){$('utrMsg').innerHTML='<div class="error">Order session नहीं मिला. Buy Now फिर से करें.</div>';return;}
+  $('utrBtn').disabled=true;$('utrMsg').textContent='Submitting…';
+  try{
+    const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({utr})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'UTR submit failed');
+    $('utrMsg').innerHTML='<div class="pending"><b>Payment submitted.</b><br>Admin approval pending. Approval ke baad ID yahin milegi.</div>';
+    $('utrBtn').disabled=true;
+    await checkQrStatus(orderId);
+  }catch(e){$('utrMsg').innerHTML='<div class="error">'+esc(e.message)+'</div>';$('utrBtn').disabled=false;}
 }
 async function checkQrStatus(orderId){
   try{

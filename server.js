@@ -126,12 +126,9 @@ app.post('/api/admin/orders/:orderId/approve',auth,async(req,res)=>{
     const ord=await q("SELECT * FROM orders WHERE order_id=$1",[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
     if(ord.rows[0].status==='approved' || ord.rows[0].status==='paid') return res.json({ok:true,already:true});
-    if(ord.rows[0].status!=='payment_received') return res.status(400).json({error:'Payment has not been verified by Razorpay yet'});
-    if(ord.rows[0].payment_id){
-      const payment=await razorpay.payments.fetch(ord.rows[0].payment_id);
-      if(!payment || payment.status!=='captured' || payment.currency!=='INR' || Number(payment.amount)!==Number(ord.rows[0].amount_paise)) return res.status(400).json({error:'Razorpay payment is not valid/captured'});
-    }
-    await fulfillQr(req.params.orderId,ord.rows[0].payment_id,ord.rows[0].qr_code_id);
+    if(ord.rows[0].status!=='payment_received') return res.status(400).json({error:'UTR has not been submitted yet'});
+    if(!ord.rows[0].utr) return res.status(400).json({error:'UTR is required before approval'});
+    await fulfillManual(req.params.orderId);
     res.json({ok:true});
   }catch(e){console.error('Approve error:',e);res.status(500).json({error:e.message||'Could not approve order'});}
 });
@@ -186,26 +183,13 @@ async function createOrder(req,res){
   const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   if(count.rows[0].count<qty) return res.status(409).json({error:'Not enough stock'});
   try{
-    // Create our own order reference first. A QR payment is not a Razorpay Checkout order.
+    // Manual UPI flow: no Razorpay Checkout and no gateway redirect.
+    // The customer scans the admin-provided static QR and then submits the UTR.
     const orderId='NB'+Date.now()+Math.floor(Math.random()*100000);
-    const closeBy=Math.floor(Date.now()/1000)+300; // 5 minutes
-    const qr=await razorpayApi('/payments/qr_codes',{
-      method:'POST',
-      body:JSON.stringify({
-        type:'upi_qr',
-        name:'NISHAD BRAND',
-        usage:'single_use',
-        fixed_amount:true,
-        payment_amount:money(price),
-        description:'NISHAD BRAND - '+qty+' ID package',
-        close_by:closeBy,
-        notes:{order_id:orderId,package_qty:String(qty)}
-      })
-    });
-    if(!qr.id || !qr.image_url) throw new Error('Razorpay did not return a QR image. Enable UPI QR Codes API on your account.');
-    await q('INSERT INTO orders(order_id,qr_code_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7)',[orderId,qr.id,qty,money(price),'created',name,phone]);
-    res.json({orderId,qrId:qr.id,qrImage:qr.image_url,amount:money(price),currency:'INR',expiresAt:closeBy*1000});
-  }catch(e){console.error('QR create error:',e);res.status(500).json({error:e.message || 'Could not create payment QR'});}
+    const qrImage=(await setting('qr_data')) || '/payment-qr.png';
+    await q('INSERT INTO orders(order_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6)',[orderId,qty,money(price),'created',name,phone]);
+    res.json({orderId,qrImage,amount:money(price),currency:'INR',expiresAt:Date.now()+300000});
+  }catch(e){console.error('Manual order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
 app.post('/api/orders',createOrder);
 
@@ -262,27 +246,59 @@ async function getQrPayments(qrId){
   return Array.isArray(data.items)?data.items:[];
 }
 
+app.post('/api/orders/:orderId/utr',async(req,res)=>{
+  try{
+    const orderId=String(req.params.orderId||'').trim();
+    const utr=String(req.body?.utr||'').trim().replace(/\s+/g,'');
+    if(!orderId || !utr || utr.length<4 || utr.length>100) return res.status(400).json({error:'Please enter a valid UTR / Transaction ID'});
+    const ord=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
+    if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
+    const order=ord.rows[0];
+    if(order.status==='approved' || order.status==='paid') return res.json({ok:true,status:'approved',...await getOrderItems(orderId)});
+    if(order.status==='rejected') return res.status(400).json({error:'This order was rejected'});
+    if(Date.now() > new Date(order.created_at).getTime()+300000) return res.status(410).json({error:'QR expired. Please start a new order.'});
+    const duplicate=await q('SELECT order_id,status FROM orders WHERE LOWER(utr)=LOWER($1) AND order_id<>$2 LIMIT 1',[utr,orderId]);
+    if(duplicate.rows[0]) return res.status(409).json({error:'This UTR is already submitted for another order'});
+    const r=await q("UPDATE orders SET status='payment_received',utr=$1 WHERE order_id=$2 AND status='created' RETURNING order_id,utr,package_qty,amount_paise,status",[utr,orderId]);
+    if(!r.rows[0]){
+      const latest=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
+      if(latest.rows[0]?.status==='payment_received') return res.json({ok:true,status:'pending_approval',order:latest.rows[0]});
+      return res.status(400).json({error:'Order cannot accept UTR in its current state'});
+    }
+    res.json({ok:true,status:'pending_approval',order:r.rows[0]});
+  }catch(e){console.error('UTR submit error:',e);res.status(500).json({error:'Could not submit UTR'});}
+});
+
 app.get('/api/payment/qr-status/:orderId',async(req,res)=>{
   try{
-    const ord=await q('SELECT * FROM orders WHERE order_id=$1',[req.params.orderId]);
+    const ord=await q('SELECT order_id,status,utr,payment_id,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
     const order=ord.rows[0];
     if(order.status==='approved' || order.status==='paid') return res.json({status:'approved',...await getOrderItems(order.order_id)});
-    if(order.status==='payment_received') return res.json({status:'pending_approval',order:{order_id:order.order_id,utr:order.utr,payment_id:order.payment_id,package_qty:order.package_qty,amount_paise:order.amount_paise}});
-    if(!order.qr_code_id) return res.status(400).json({error:'QR order not found'});
-    const qr=await razorpayApi('/payments/qr_codes/'+encodeURIComponent(order.qr_code_id),{method:'GET'});
-    const now=Date.now();
-    const expired=(qr.close_by && now>Number(qr.close_by)*1000) || qr.status==='closed';
-    const payments=await getQrPayments(order.qr_code_id);
-    const payment=payments.find(p=>p.status==='captured' && Number(p.amount)===Number(order.amount_paise) && p.currency==='INR');
-    if(payment){
-      await recordQrPayment(order.order_id,payment.id,order.qr_code_id);
-      const updated=await q('SELECT order_id,utr,payment_id,package_qty,amount_paise FROM orders WHERE order_id=$1',[order.order_id]);
-      return res.json({status:'pending_approval',order:updated.rows[0]});
-    }
-    res.json({status:expired?'expired':'pending',expiresAt:qr.close_by?Number(qr.close_by)*1000:null});
-  }catch(e){console.error('QR status error:',e);res.status(500).json({error:e.message||'Could not check payment'});}
+    if(order.status==='payment_received') return res.json({status:'pending_approval',order});
+    const expiresAt=new Date(order.created_at).getTime()+300000;
+    res.json({status:Date.now()>expiresAt?'expired':'pending',expiresAt});
+  }catch(e){console.error('Manual QR status error:',e);res.status(500).json({error:e.message||'Could not check order'});}
 });
+
+async function fulfillManual(orderId){
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const ord=await client.query('SELECT * FROM orders WHERE order_id=$1 FOR UPDATE',[orderId]);
+    if(!ord.rows[0]) throw new Error('Order not found');
+    if(ord.rows[0].status==='approved' || ord.rows[0].status==='paid'){ await client.query('COMMIT'); return; }
+    if(ord.rows[0].status!=='payment_received' || !ord.rows[0].utr) throw new Error('UTR/payment is still pending');
+    const items=await client.query("SELECT id,login_id,login_password,extra_data FROM inventory WHERE status='available' ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $1",[ord.rows[0].package_qty]);
+    if(items.rows.length<ord.rows[0].package_qty){ await client.query('ROLLBACK'); throw new Error('Insufficient stock at fulfillment'); }
+    for(const item of items.rows){
+      await client.query("UPDATE inventory SET status='sold',sold_order_id=$1,reserved_order_id=NULL WHERE id=$2",[orderId,item.id]);
+      await client.query('INSERT INTO order_items(order_id,inventory_id) VALUES($1,$2)',[orderId,item.id]);
+    }
+    await client.query("UPDATE orders SET status='approved',fulfilled_at=NOW() WHERE order_id=$1",[orderId]);
+    await client.query('COMMIT');
+  }catch(e){try{await client.query('ROLLBACK')}catch{};throw e;}finally{client.release();}
+}
 
 async function fulfill(orderId,paymentId){
   const client=await pool.connect();

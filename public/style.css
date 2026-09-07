@@ -109,3 +109,5 @@ code{font-size:15px}
 }
 .qr-timer{margin-top:12px;text-align:center;font-size:16px;color:#1f2937}.qr-timer b{font-variant-numeric:tabular-nums;color:#dc2626}
 .pending{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:14px;border-radius:13px;margin-top:12px;line-height:1.5}.pending small{color:#7c2d12}
+
+.utr-box{margin:14px 0 0;padding:14px;border:1px solid #dbe5f0;border-radius:16px;background:#f8fbff}.utr-box input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:11px;font-size:14px;outline:none}.utr-box button{width:100%;margin-top:9px;padding:12px;border:0;border-radius:11px;background:linear-gradient(135deg,#1d4ed8,#0891b2);color:#fff;font-weight:900;cursor:pointer}.utr-box button:disabled{opacity:.55;cursor:not-allowed}.utr-box #utrMsg{margin-top:8px}

@@ -34,7 +34,8 @@
     <div class="upi-apps">GPay&nbsp; • &nbsp;PhonePe&nbsp; • &nbsp;Paytm&nbsp; • &nbsp;BHIM&nbsp; • &nbsp;and more</div>
     <div class="qr-timer">QR valid for <b id="timer">05:00</b></div>
   </div>
-  <div class="verify-note">Payment successful होने के बाद server Razorpay से payment verify करेगा। <b>Verified payment के बिना ID release नहीं होगी.</b></div>
+  <div class="verify-note">Payment करने के बाद UTR / Transaction ID डालें। <b>Admin approval के बिना ID release नहीं होगी.</b></div>
+  <div id="utrBox" class="utr-box hidden"><input id="utrInput" placeholder="Enter UTR / Transaction ID" autocomplete="off"><button id="utrBtn" onclick="submitUTR()">Submit UTR</button><div id="utrMsg"></div></div>
   <div id="payStatus" class="qr-status">QR तैयार हो रहा है…</div>
 </div></div>
 <script src="app.js"></script></body></html>
