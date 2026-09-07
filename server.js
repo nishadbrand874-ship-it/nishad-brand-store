@@ -43,7 +43,15 @@ function auth(req,res,next){
 function money(n){ return Math.round(Number(n)*100); }
 function signToken(){ return jwt.sign({role:'admin'}, process.env.JWT_SECRET, {expiresIn:'7d'}); }
 async function q(text, params=[]){ return pool.query(text, params); }
-async function normalizeStorePrice(){ try { await q("UPDATE settings SET value='1' WHERE key='price_per_id' AND value IN ('100','180','')"); } catch(e) { console.warn('Price normalization skipped:', e.message); } }
+async function normalizeStorePrice(){ try {
+  await q("INSERT INTO settings(key,value) VALUES ('price_per_id','1') ON CONFLICT(key) DO UPDATE SET value='1'");
+  await q("INSERT INTO settings(key,value) VALUES ('package_1','1') ON CONFLICT(key) DO UPDATE SET value='1'");
+  await q("INSERT INTO settings(key,value) VALUES ('package_2','2') ON CONFLICT(key) DO UPDATE SET value='2'");
+  await q("INSERT INTO settings(key,value) VALUES ('package_5','5') ON CONFLICT(key) DO UPDATE SET value='5'");
+  await q("INSERT INTO settings(key,value) VALUES ('package_10','10') ON CONFLICT(key) DO UPDATE SET value='10'");
+  await q("INSERT INTO settings(key,value) VALUES ('package_15','15') ON CONFLICT(key) DO UPDATE SET value='15'");
+  await q("INSERT INTO settings(key,value) VALUES ('package_20','20') ON CONFLICT(key) DO UPDATE SET value='20'");
+ } catch(e) { console.warn('Price normalization skipped:', e.message); } }
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
 async function settings(){ const r=await q('SELECT key,value FROM settings'); return Object.fromEntries(r.rows.map(x=>[x.key,x.value])); }
 function publicSettings(s, stock=0){
@@ -228,6 +236,7 @@ app.get('/admin', (req,res)=>res.sendFile(path.join(__dirname,'public','admin.ht
 (async()=>{
   try{
     await q(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
+    await normalizeStorePrice();
     app.listen(PORT,()=>console.log(`NISHAD BRAND running on ${PORT}`));
   }catch(e){ console.error('Startup DB error:',e); process.exit(1); }
 })();
