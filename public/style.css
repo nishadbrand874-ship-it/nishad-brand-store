@@ -108,3 +108,4 @@ code{font-size:15px}
   display:none !important;
 }
 .qr-timer{margin-top:12px;text-align:center;font-size:16px;color:#1f2937}.qr-timer b{font-variant-numeric:tabular-nums;color:#dc2626}
+.pending{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:14px;border-radius:13px;margin-top:12px;line-height:1.5}.pending small{color:#7c2d12}

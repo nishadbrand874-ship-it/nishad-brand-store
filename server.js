@@ -46,8 +46,8 @@ app.post('/api/payment/webhook', express.raw({type:'application/json'}), async (
       }
       if(orderId && paymentId){
         const ord=await q('SELECT qr_code_id FROM orders WHERE order_id=$1',[orderId]);
-        if(ord.rows[0]?.qr_code_id) await fulfillQr(orderId,paymentId,qrCodeId);
-        else await fulfill(orderId,paymentId);
+        if(ord.rows[0]?.qr_code_id) await recordQrPayment(orderId,paymentId,qrCodeId);
+        else await recordPayment(orderId,paymentId);
       }
     }
     res.send('ok');
@@ -121,6 +121,28 @@ app.post('/api/admin/settings',auth,async(req,res)=>{
   for(const key of allowed){ if(req.body[key]!==undefined) await q('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',[key,String(req.body[key])]); }
   res.json({ok:true});
 });
+app.post('/api/admin/orders/:orderId/approve',auth,async(req,res)=>{
+  try{
+    const ord=await q("SELECT * FROM orders WHERE order_id=$1",[req.params.orderId]);
+    if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
+    if(ord.rows[0].status==='approved' || ord.rows[0].status==='paid') return res.json({ok:true,already:true});
+    if(ord.rows[0].status!=='payment_received') return res.status(400).json({error:'Payment has not been verified by Razorpay yet'});
+    if(ord.rows[0].payment_id){
+      const payment=await razorpay.payments.fetch(ord.rows[0].payment_id);
+      if(!payment || payment.status!=='captured' || payment.currency!=='INR' || Number(payment.amount)!==Number(ord.rows[0].amount_paise)) return res.status(400).json({error:'Razorpay payment is not valid/captured'});
+    }
+    await fulfillQr(req.params.orderId,ord.rows[0].payment_id,ord.rows[0].qr_code_id);
+    res.json({ok:true});
+  }catch(e){console.error('Approve error:',e);res.status(500).json({error:e.message||'Could not approve order'});}
+});
+app.post('/api/admin/orders/:orderId/reject',auth,async(req,res)=>{
+  try{
+    const r=await q("UPDATE orders SET status='rejected' WHERE order_id=$1 AND status='payment_received' RETURNING order_id",[req.params.orderId]);
+    if(!r.rows[0]) return res.status(400).json({error:'Only pending payment orders can be rejected'});
+    res.json({ok:true});
+  }catch(e){res.status(500).json({error:'Could not reject order'});}
+});
+
 app.post('/api/admin/assets',auth,upload.fields([{name:'logo',maxCount:1},{name:'qr',maxCount:1}]),async(req,res)=>{
   for(const key of ['logo','qr']){
     const file=req.files?.[key]?.[0];
@@ -187,6 +209,27 @@ async function createOrder(req,res){
 }
 app.post('/api/orders',createOrder);
 
+async function recordQrPayment(orderId,paymentId,qrCodeId){
+  const ord=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
+  if(!ord.rows[0] || ord.rows[0].status==='approved' || ord.rows[0].status==='paid') return;
+  const payment=await razorpay.payments.fetch(paymentId);
+  if(!payment) throw new Error('Payment not found');
+  if(payment.currency!=='INR' || Number(payment.amount)!==Number(ord.rows[0].amount_paise) || payment.status!=='captured') throw new Error('Payment validation failed');
+  if(payment.qr_code_id && payment.qr_code_id!==ord.rows[0].qr_code_id) throw new Error('Payment QR mismatch');
+  const utr=payment?.acquirer_data?.rrn || payment?.acquirer_data?.bank_transaction_id || null;
+  await q("UPDATE orders SET status='payment_received',payment_id=$1,utr=COALESCE($2,utr) WHERE order_id=$3",[paymentId,utr,orderId]);
+}
+
+async function recordPayment(orderId,paymentId){
+  const ord=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
+  if(!ord.rows[0] || ord.rows[0].status==='approved' || ord.rows[0].status==='paid') return;
+  const payment=await razorpay.payments.fetch(paymentId);
+  if(!payment || payment.currency!=='INR' || Number(payment.amount)!==Number(ord.rows[0].amount_paise) || payment.status!=='captured') throw new Error('Payment validation failed');
+  if(payment.order_id!==orderId) throw new Error('Payment does not belong to this order');
+  const utr=payment?.acquirer_data?.rrn || payment?.acquirer_data?.bank_transaction_id || null;
+  await q("UPDATE orders SET status='payment_received',payment_id=$1,utr=COALESCE($2,utr) WHERE order_id=$3",[paymentId,utr,orderId]);
+}
+
 async function fulfillQr(orderId,paymentId,qrCodeId){
   const client=await pool.connect();
   try{
@@ -209,7 +252,7 @@ async function fulfillQr(orderId,paymentId,qrCodeId){
       await client.query('INSERT INTO order_items(order_id,inventory_id) VALUES($1,$2)',[orderId,item.id]);
     }
     const utr=payment?.acquirer_data?.rrn || payment?.acquirer_data?.bank_transaction_id || null;
-    await client.query("UPDATE orders SET status='paid',payment_id=$1,utr=$2,fulfilled_at=NOW() WHERE order_id=$3",[paymentId,utr,orderId]);
+    await client.query("UPDATE orders SET status='approved',payment_id=$1,utr=$2,fulfilled_at=NOW() WHERE order_id=$3",[paymentId,utr,orderId]);
     await client.query('COMMIT');
   }catch(e){try{await client.query('ROLLBACK')}catch{};throw e;}finally{client.release();}
 }
@@ -224,7 +267,8 @@ app.get('/api/payment/qr-status/:orderId',async(req,res)=>{
     const ord=await q('SELECT * FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
     const order=ord.rows[0];
-    if(order.status==='paid') return res.json({status:'paid',...await getOrderItems(order.order_id)});
+    if(order.status==='approved' || order.status==='paid') return res.json({status:'approved',...await getOrderItems(order.order_id)});
+    if(order.status==='payment_received') return res.json({status:'pending_approval',order:{order_id:order.order_id,utr:order.utr,payment_id:order.payment_id,package_qty:order.package_qty,amount_paise:order.amount_paise}});
     if(!order.qr_code_id) return res.status(400).json({error:'QR order not found'});
     const qr=await razorpayApi('/payments/qr_codes/'+encodeURIComponent(order.qr_code_id),{method:'GET'});
     const now=Date.now();
@@ -232,8 +276,9 @@ app.get('/api/payment/qr-status/:orderId',async(req,res)=>{
     const payments=await getQrPayments(order.qr_code_id);
     const payment=payments.find(p=>p.status==='captured' && Number(p.amount)===Number(order.amount_paise) && p.currency==='INR');
     if(payment){
-      await fulfillQr(order.order_id,payment.id,order.qr_code_id);
-      return res.json({status:'paid',...await getOrderItems(order.order_id)});
+      await recordQrPayment(order.order_id,payment.id,order.qr_code_id);
+      const updated=await q('SELECT order_id,utr,payment_id,package_qty,amount_paise FROM orders WHERE order_id=$1',[order.order_id]);
+      return res.json({status:'pending_approval',order:updated.rows[0]});
     }
     res.json({status:expired?'expired':'pending',expiresAt:qr.close_by?Number(qr.close_by)*1000:null});
   }catch(e){console.error('QR status error:',e);res.status(500).json({error:e.message||'Could not check payment'});}
@@ -264,7 +309,7 @@ async function fulfill(orderId,paymentId){
     }
     let utr=null;
     try{ if(paymentId){ const p=await razorpay.payments.fetch(paymentId); utr=p?.acquirer_data?.rrn || p?.acquirer_data?.bank_transaction_id || null; } }catch{}
-    await client.query("UPDATE orders SET status='paid',payment_id=$1,utr=$2,fulfilled_at=NOW() WHERE order_id=$3",[paymentId||null,utr,orderId]);
+    await client.query("UPDATE orders SET status='approved',payment_id=$1,utr=$2,fulfilled_at=NOW() WHERE order_id=$3",[paymentId||null,utr,orderId]);
     await client.query('COMMIT');
   }catch(e){ try{await client.query('ROLLBACK')}catch{}; throw e; } finally{client.release();}
 }
@@ -272,10 +317,14 @@ async function fulfill(orderId,paymentId){
 app.post('/api/payment/verify',async(req,res)=>res.status(410).json({error:'Checkout verification is disabled. Please pay using the QR shown on screen.'}));
 
 async function getOrderItems(utrOrOrder){
-  const ord=await q('SELECT order_id,status,package_qty,amount_paise,payment_id,utr,created_at FROM orders WHERE order_id=$1 OR utr=$1 OR payment_id=$1 ORDER BY created_at DESC LIMIT 1',[utrOrOrder]);
+  const ord=await q('SELECT order_id,status,package_qty,amount_paise,payment_id,utr,created_at,fulfilled_at FROM orders WHERE order_id=$1 OR utr=$1 OR payment_id=$1 ORDER BY created_at DESC LIMIT 1',[utrOrOrder]);
   if(!ord.rows[0]) return {found:false};
-  const items=await q('SELECT i.login_id,i.login_password,i.extra_data FROM order_items oi JOIN inventory i ON i.id=oi.inventory_id WHERE oi.order_id=$1 ORDER BY i.id',[ord.rows[0].order_id]);
-  return {found:true,order:ord.rows[0],items:items.rows};
+  const order=ord.rows[0];
+  if(order.status==='approved' || order.status==='paid'){
+    const items=await q('SELECT i.login_id,i.login_password,i.extra_data FROM order_items oi JOIN inventory i ON i.id=oi.inventory_id WHERE oi.order_id=$1 ORDER BY i.id',[order.order_id]);
+    return {found:true,status:'approved',order,items:items.rows};
+  }
+  return {found:true,status:order.status==='rejected'?'rejected':'pending',order,items:[]};
 }
 app.get('/api/order-check/:utr',async(req,res)=>{ try{res.json(await getOrderItems(req.params.utr.trim()));}catch{res.status(500).json({error:'Server error'});} });
 

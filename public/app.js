@@ -34,7 +34,8 @@ async function checkQrStatus(orderId){
   try{
     const r=await fetch('/api/payment/qr-status/'+encodeURIComponent(orderId),{cache:'no-store'}); const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Verification failed');
-    if(d.status==='paid'){stopPolling();showIDs(d.items,d.order);return;}
+    if(d.status==='approved' || d.status==='paid'){stopPolling();showIDs(d.items,d.order);return;}
+    if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="pending"><b>Payment received.</b><br>Admin approval pending. Approval ke baad hi ID release hogi.<br><small>UTR/Payment ID: '+esc((d.order&&(d.order.utr||d.order.payment_id))||'')+'</small></div>'; return; }
     if(d.status==='expired'){stopPolling();$('payStatus').innerHTML='<div class="error">QR expired. Please click Buy Now again to generate a new QR.</div>';return;}
   }catch(e){console.warn(e);}
 }
@@ -42,5 +43,5 @@ function startCountdown(expiresAt){clearInterval(countdownTimer);const tick=()=>
 function stopPolling(){if(pollTimer)clearInterval(pollTimer);pollTimer=null;if(countdownTimer)clearInterval(countdownTimer);countdownTimer=null;}
 function showIDs(items,order){const rows=(items||[]).map((x,i)=>'<div class="idrow"><b>ID '+(i+1)+':</b> <code>'+esc(x.login_id)+'</code>'+(x.login_password?'<br><b>Password:</b> <code>'+esc(x.login_password)+'</code>':'')+(x.extra_data?'<br>'+esc(x.extra_data):'')+'</div>').join('');$('payStatus').innerHTML='<div class="success"><b>Payment verified successfully.</b><br>UTR/Payment ID: <code>'+esc((order&&(order.utr||order.payment_id))||'')+'</code>'+rows+'</div>';}
 async function checkUTR(){const u=$('utr').value.trim();if(!u)return;$('result').textContent='Checking…';try{const r=await fetch('/api/order-check/'+encodeURIComponent(u));const d=await r.json();if(!d.found){$('result').innerHTML='<div class="error">Not Found — इस UTR/Payment ID से कोई verified purchase नहीं मिला।</div>';return;}showCheck(d.items,d.order);}catch(e){$('result').innerHTML='<div class="error">'+esc(e.message)+'</div>';}}
-function showCheck(items,order){const rows=(items||[]).map((x,i)=>'<div class="idrow"><b>ID '+(i+1)+':</b> <code>'+esc(x.login_id)+'</code>'+(x.login_password?'<br><b>Password:</b> <code>'+esc(x.login_password)+'</code>':'')+(x.extra_data?'<br>'+esc(x.extra_data):'')+'</div>').join('');$('result').innerHTML='<div class="success"><b>Verified Purchase</b><br>Order: <code>'+esc(order.order_id)+'</code>'+rows+'</div>';}
+function showCheck(items,order){if(order.status==='rejected'){ $('result').innerHTML='<div class="error"><b>Payment Rejected.</b><br>Admin ne is payment ko approve nahi kiya.</div>';return;} if(order.status!=='approved'&&order.status!=='paid'){ $('result').innerHTML='<div class="pending"><b>Payment Pending Approval</b><br>Payment record mil gaya hai, lekin admin approval abhi pending hai.<br>Order: <code>'+esc(order.order_id)+'</code></div>';return;} const rows=(items||[]).map((x,i)=>'<div class="idrow"><b>ID '+(i+1)+':</b> <code>'+esc(x.login_id)+'</code>'+(x.login_password?'<br><b>Password:</b> <code>'+esc(x.login_password)+'</code>':'')+(x.extra_data?'<br>'+esc(x.extra_data):'')+'</div>').join('');$('result').innerHTML='<div class="success"><b>Verified Purchase</b><br>Order: <code>'+esc(order.order_id)+'</code>'+rows+'</div>';}
 init();
