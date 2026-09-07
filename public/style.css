@@ -165,3 +165,32 @@ body{background:
 .close{right:9px!important;top:8px!important;width:32px!important;height:32px!important;font-size:21px!important}
 @media(max-width:520px){.qr-box{width:min(350px,calc(100vw - 18px))!important}.qr-frame img{width:175px!important;height:175px!important}.qr-head{padding:12px 15px 9px!important}.scan-title{font-size:17px!important}}
 
+
+/* ===== V24 PREMIUM LIVE COLOUR / DYNAMIC PAYMENT ===== */
+body{position:relative;overflow-x:hidden;background:
+ radial-gradient(circle at 8% 12%,rgba(59,130,246,.34),transparent 26%),
+ radial-gradient(circle at 92% 10%,rgba(6,182,212,.28),transparent 28%),
+ radial-gradient(circle at 50% 88%,rgba(139,92,246,.22),transparent 30%),
+ linear-gradient(120deg,#eef6ff,#f8fbff 42%,#eef2ff 72%,#ecfeff)!important;background-size:180% 180%;animation:v24bg 12s ease-in-out infinite}
+body:before,body:after{content:"";position:fixed;z-index:-1;border-radius:50%;filter:blur(2px);pointer-events:none}
+body:before{width:320px;height:320px;left:-120px;top:34%;background:radial-gradient(circle,rgba(59,130,246,.18),transparent 68%);animation:floatA 10s ease-in-out infinite}
+body:after{width:360px;height:360px;right:-150px;bottom:5%;background:radial-gradient(circle,rgba(6,182,212,.16),transparent 68%);animation:floatB 13s ease-in-out infinite}
+@keyframes v24bg{0%,100%{background-position:0% 25%}50%{background-position:100% 75%}}
+@keyframes floatA{50%{transform:translate(45px,-35px) scale(1.08)}}
+@keyframes floatB{50%{transform:translate(-35px,30px) scale(.94)}}
+.news-bar{background:linear-gradient(100deg,rgba(255,247,237,.96),rgba(254,249,195,.96),rgba(236,254,255,.96),rgba(238,242,255,.96),rgba(254,242,242,.96))!important;background-size:350% 100%!important;animation:newsFlow 6s linear infinite;border:1px solid rgba(245,158,11,.55)!important;box-shadow:0 12px 32px rgba(37,99,235,.12),inset 0 1px rgba(255,255,255,.85)!important}
+#newsText{font-weight:950;letter-spacing:.15px;text-shadow:0 1px 0 rgba(255,255,255,.65)}
+.news-c1{color:#dc2626}.news-c2{color:#2563eb}.news-c3{color:#059669}
+@keyframes newsFlow{0%{background-position:0% 50%}100%{background-position:350% 50%}}
+.news-dot{color:#ef4444!important}
+.stock-banner.in{background:linear-gradient(90deg,#ecfdf5,#dcfce7,#ecfeff,#eff6ff)!important;background-size:250% 100%;animation:stockFlow 5s ease infinite,stockPulse 2.4s ease-in-out infinite}
+@keyframes stockFlow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.hero-title{box-shadow:0 18px 45px rgba(37,99,235,.11),inset 0 1px rgba(255,255,255,.9)!important}
+.card{box-shadow:0 15px 35px rgba(30,64,175,.10)!important}
+.card:hover{box-shadow:0 22px 45px rgba(30,64,175,.18)!important}
+/* exact payable amount + UPI deep-link */
+.qr-head #payText{font-size:18px!important;color:#0f172a!important}
+.upi-open{display:block;width:max-content;margin:9px auto 0;padding:8px 13px;border-radius:999px;text-decoration:none;font-size:11px;font-weight:950;color:#fff;background:linear-gradient(135deg,#16a34a,#0891b2,#2563eb);background-size:220% 220%;animation:upiGlow 4s ease infinite;box-shadow:0 7px 18px rgba(8,145,178,.18)}
+@keyframes upiGlow{50%{background-position:100% 50%}}
+.qr-frame{box-shadow:0 0 0 3px rgba(37,99,235,.05),0 12px 30px rgba(15,23,42,.12)!important}
+@media(max-width:520px){.upi-open{font-size:10px;padding:7px 11px}.news-bar{line-height:1.45}}

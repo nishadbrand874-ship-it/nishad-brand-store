@@ -30,6 +30,10 @@ services:
         value: "9296271001"
       - key: SITE_NAME
         value: "NISHAD BRAND"
+      - key: UPI_VPA
+        sync: false
+      - key: UPI_NAME
+        value: "NISHAD BRAND"
 
 databases:
   - name: nishad-brand-db

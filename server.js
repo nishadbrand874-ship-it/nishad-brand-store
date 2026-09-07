@@ -9,6 +9,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const QRCode = require('qrcode');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -117,7 +118,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 });
 
 app.post('/api/admin/settings',auth,async(req,res)=>{
-  const allowed=['site_name','whatsapp_number','price_per_id','news'];
+  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news'];
   for(const key of allowed){ if(req.body[key]!==undefined) await q('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',[key,String(req.body[key])]); }
   res.json({ok:true});
 });
@@ -183,18 +184,16 @@ async function createOrder(req,res){
   const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   if(count.rows[0].count<qty) return res.status(409).json({error:'Not enough stock'});
   try{
-    // Manual UPI flow: no Razorpay Checkout and no gateway redirect.
-    // The customer scans the admin-provided static QR and then submits the UTR.
+    // Manual UPI flow: generate a fresh UPI QR for every order.
+    // The amount is embedded in the UPI URI, so supported UPI apps show the exact payable amount.
     const orderId='NB'+Date.now()+Math.floor(Math.random()*100000);
-    const vpa=(await setting('upi_vpa')).trim();
-    const payeeName=(await setting('upi_name')).trim() || 'NISHAD BRAND';
-    let qrImage=(await setting('qr_data')) || '/payment-qr.png';
-    if(vpa){
-      const upiUrl='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payeeName)+'&am='+encodeURIComponent(price.toFixed(2))+'&cu=INR&tn='+encodeURIComponent(orderId);
-      qrImage=await QRCode.toDataURL(upiUrl,{width:320,margin:2,errorCorrectionLevel:'M'});
-    }
+    const vpa=(await setting('upi_vpa')).trim() || String(process.env.UPI_VPA||'').trim();
+    const payeeName=(await setting('upi_name')).trim() || String(process.env.UPI_NAME||'NISHAD BRAND').trim() || 'NISHAD BRAND';
+    if(!vpa) return res.status(503).json({error:'UPI ID / VPA is not configured. Admin panel → Store Settings में UPI ID डालें।'});
+    const upiUrl='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payeeName)+'&am='+encodeURIComponent(price.toFixed(2))+'&cu=INR&tn='+encodeURIComponent(orderId);
+    const qrImage=await QRCode.toDataURL(upiUrl,{width:420,margin:2,errorCorrectionLevel:'M'});
     await q('INSERT INTO orders(order_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6)',[orderId,qty,money(price),'created',name,phone]);
-    res.json({orderId,qrImage,amount:money(price),currency:'INR',expiresAt:Date.now()+300000});
+    res.json({orderId,qrImage,upiLink:upiUrl,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000});
   }catch(e){console.error('Manual order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
 app.post('/api/orders',createOrder);
