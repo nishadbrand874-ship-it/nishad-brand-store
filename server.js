@@ -43,6 +43,7 @@ function auth(req,res,next){
 function money(n){ return Math.round(Number(n)*100); }
 function signToken(){ return jwt.sign({role:'admin'}, process.env.JWT_SECRET, {expiresIn:'7d'}); }
 async function q(text, params=[]){ return pool.query(text, params); }
+async function normalizeStorePrice(){ try { await q("UPDATE settings SET value='1' WHERE key='price_per_id' AND value IN ('100','180','')"); } catch(e) { console.warn('Price normalization skipped:', e.message); } }
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
 async function settings(){ const r=await q('SELECT key,value FROM settings'); return Object.fromEntries(r.rows.map(x=>[x.key,x.value])); }
 function publicSettings(s, stock=0){

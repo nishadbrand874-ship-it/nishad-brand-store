@@ -45,8 +45,8 @@ INSERT INTO settings(key,value) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO settings(key,value) VALUES
-('price_per_id','180'),('package_1','180'),('package_2','360'),('package_5','900'),
-('package_10','1800'),('package_15','2700'),('package_20','3600')
+('price_per_id','1'),('package_1','1'),('package_2','2'),('package_5','5'),
+('package_10','10'),('package_15','15'),('package_20','20')
 ON CONFLICT (key) DO NOTHING;
 
 CREATE UNIQUE INDEX IF NOT EXISTS orders_utr_unique ON orders(LOWER(utr)) WHERE utr IS NOT NULL;
