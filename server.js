@@ -55,7 +55,8 @@ async function normalizeStorePrice(){ try {
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
 async function settings(){ const r=await q('SELECT key,value FROM settings'); return Object.fromEntries(r.rows.map(x=>[x.key,x.value])); }
 function publicSettings(s, stock=0){
-  const basePrice = Number(s.price_per_id ?? s.package_1 ?? 0);
+  // Store pricing is fixed at ₹1 per ID. Never inherit an old saved ₹100 price.
+  const basePrice = 1;
   const packages = [1,2,5,10,15,20].map(qty=>({
     qty,
     price: Math.round(basePrice * qty * 100) / 100,
@@ -141,7 +142,8 @@ app.delete('/api/admin/inventory/:id',auth,async(req,res)=>{ await q("DELETE FRO
 async function createOrder(req,res){
   const qty=Number(req.body.qty), name=(req.body.name||'').trim(), phone=(req.body.phone||'').trim();
   if(!Number.isInteger(qty) || qty < 1 || qty > 1000) return res.status(400).json({error:'Quantity must be between 1 and 1000'});
-  const basePrice=Number(await setting('price_per_id') || await setting('package_1'));
+  // Fixed storefront price: exactly ₹1 per ID.
+  const basePrice=1;
   const price=Math.round(basePrice * qty * 100) / 100;
   if(!price) return res.status(400).json({error:'Package not configured'});
   const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
