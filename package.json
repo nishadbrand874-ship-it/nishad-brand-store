@@ -2,7 +2,7 @@
   "name": "nishad-brand-id-store",
   "version": "1.1.0",
   "private": true,
-  "description": "NISHAD BRAND ID Store with admin inventory and Razorpay payment verification",
+  "description": "NISHAD BRAND ID Store with manual UPI QR payment and admin UTR approval",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -19,7 +19,6 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "pg": "^8.13.1",
-    "razorpay": "^2.9.6",
     "qrcode": "^1.5.4"
   }
 }
