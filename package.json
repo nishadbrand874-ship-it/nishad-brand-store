@@ -1,8 +1,8 @@
 {
   "name": "nishad-brand-id-store",
-  "version": "1.0.0",
+  "version": "21.0.0",
   "private": true,
-  "description": "NISHAD BRAND ID Store with admin inventory and Razorpay payment verification",
+  "description": "NISHAD BRAND ID Store - dynamic UPI QR, manual payment approval and live stock system",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -9,6 +9,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const QRCode = require('qrcode');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -184,11 +185,15 @@ async function createOrder(req,res){
   if(count.rows[0].count<qty) return res.status(409).json({error:'Not enough stock'});
   try{
     // Manual UPI flow: no Razorpay Checkout and no gateway redirect.
-    // The customer scans the admin-provided static QR and then submits the UTR.
+    // Generate a fresh UPI QR for the exact order amount, then collect UTR.
     const orderId='NB'+Date.now()+Math.floor(Math.random()*100000);
-    const qrImage=(await setting('qr_data')) || '/payment-qr.png';
+    const upiId=String(process.env.UPI_ID || 'Q127502433@ybl').trim();
+    const upiName=String(process.env.UPI_NAME || 'PhonePeMerchant').trim();
+    if(!upiId) throw new Error('UPI_ID is not configured');
+    const upiUri='upi://pay?pa='+encodeURIComponent(upiId)+'&pn='+encodeURIComponent(upiName)+'&am='+encodeURIComponent(Number(price).toFixed(2))+'&cu=INR';
+    const qrImage=await QRCode.toDataURL(upiUri,{errorCorrectionLevel:'M',margin:2,width:420});
     await q('INSERT INTO orders(order_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6)',[orderId,qty,money(price),'created',name,phone]);
-    res.json({orderId,qrImage,amount:money(price),currency:'INR',expiresAt:Date.now()+300000});
+    res.json({orderId,qrImage,amount:money(price),amountRupees:Number(price).toFixed(2),currency:'INR',expiresAt:Date.now()+300000});
   }catch(e){console.error('Manual order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
 app.post('/api/orders',createOrder);

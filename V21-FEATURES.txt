@@ -1,0 +1,10 @@
+NISHAD BRAND V21
+
+Dynamic UPI QR per order with exact amount.
+5-minute QR countdown.
+UTR submission after payment.
+Manual admin approval/rejection.
+ID release only after approval.
+Stock-aware packages and custom quantity.
+Out of Stock when insufficient inventory.
+Admin menu/dashboard, payment approvals, inventory, settings and asset upload.
