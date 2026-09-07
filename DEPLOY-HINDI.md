@@ -23,3 +23,9 @@ After Render gives the service URL, set the webhook URL to:
 `https://YOUR-RENDER-DOMAIN/api/payment/webhook`
 
 Use the same value for the Razorpay webhook secret and `RAZORPAY_WEBHOOK_SECRET`. Enable `payment.captured` and `order.paid`.
+
+### V25 Payment Fix
+1. Render Environment में `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` सही values रखें.
+2. Real payment के लिए `rzp_live_...` LIVE keys इस्तेमाल करें; Test Mode keys से live money collect नहीं होगी.
+3. Admin → Store Settings में `UPI ID / VPA` केवल fallback के लिए है.
+4. Razorpay webhook में payment events enable रखें ताकि captured QR payments जल्दी `payment_received` बनें. Server polling भी backup verification करता है.

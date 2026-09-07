@@ -110,3 +110,9 @@ Payment verification server-side रहेगी; verified payment के बा
 User-provided UPI QR image has been placed at `public/payment-qr.png` for the QR-only payment screen.
 
 IMPORTANT: This is a static QR image. Automatic payment verification and ID release require a server-side payment reconciliation/order-verification mechanism; a static QR alone cannot prove which user paid.
+
+## V25 Payment Fix
+- Razorpay API keys available होने पर हर order के लिए exact amount का single-use Dynamic UPI QR बनता है.
+- Razorpay QR payment captured होने पर webhook/polling order को `payment_received` करता है; Admin approval के बाद ही inventory release होती है.
+- Live collection के लिए Razorpay LIVE keys और सही webhook secret लगाएँ. Test keys से real-money collection नहीं होगी.
+- UPI_VPA अब primary requirement नहीं है; यह fallback के रूप में रखा गया है.

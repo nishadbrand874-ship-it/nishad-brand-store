@@ -194,3 +194,16 @@ body:after{width:360px;height:360px;right:-150px;bottom:5%;background:radial-gra
 @keyframes upiGlow{50%{background-position:100% 50%}}
 .qr-frame{box-shadow:0 0 0 3px rgba(37,99,235,.05),0 12px 30px rgba(15,23,42,.12)!important}
 @media(max-width:520px){.upi-open{font-size:10px;padding:7px 11px}.news-bar{line-height:1.45}}
+
+/* ===== V25 NEWS + PAYMENT FIX ===== */
+.news-bar{isolation:isolate;background:linear-gradient(110deg,#fff7ed,#dbeafe,#dcfce7,#fce7f3,#fef3c7,#e0f2fe)!important;background-size:500% 100%!important;animation:newsV25 8s ease-in-out infinite!important;border:1px solid rgba(37,99,235,.24)!important;box-shadow:0 12px 30px rgba(37,99,235,.14),inset 0 1px 0 rgba(255,255,255,.95)!important}
+.news-bar:after{z-index:-1;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.82) 50%,transparent 70%)!important;animation:newsShineV25 3.2s ease-in-out infinite!important}
+#newsText{display:inline;font-size:clamp(13px,1.5vw,16px);font-weight:950;line-height:1.45;text-shadow:0 1px 0 rgba(255,255,255,.7)}
+.news-c1,.news-c2,.news-c3{background-size:200% 200%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:wordGlowV25 3.2s ease-in-out infinite}
+.news-c1{background-image:linear-gradient(135deg,#ef4444,#ec4899,#f97316)}
+.news-c2{background-image:linear-gradient(135deg,#2563eb,#06b6d4,#4f46e5);animation-delay:.25s}
+.news-c3{background-image:linear-gradient(135deg,#059669,#16a34a,#0ea5e9);animation-delay:.5s}
+@keyframes newsV25{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes newsShineV25{0%,55%{transform:translateX(-125%)}100%{transform:translateX(125%)}}
+@keyframes wordGlowV25{0%,100%{background-position:0% 50%;filter:brightness(1)}50%{background-position:100% 50%;filter:brightness(1.22)}}
+.gateway-tip{margin:0 0 16px;padding:13px 15px;border-radius:15px;background:linear-gradient(100deg,#eff6ff,#ecfeff,#f0fdf4);border:1px solid #bfdbfe;color:#164e63;box-shadow:0 8px 24px rgba(37,99,235,.08);font-size:13px;line-height:1.5}

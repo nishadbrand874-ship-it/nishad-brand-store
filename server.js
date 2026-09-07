@@ -184,16 +184,44 @@ async function createOrder(req,res){
   const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   if(count.rows[0].count<qty) return res.status(409).json({error:'Not enough stock'});
   try{
-    // Manual UPI flow: generate a fresh UPI QR for every order.
-    // The amount is embedded in the UPI URI, so supported UPI apps show the exact payable amount.
+    // Preferred flow: create a single-use Razorpay UPI QR with the exact amount.
+    // This removes the dependency on a manually entered UPI VPA and lets Razorpay
+    // report the captured payment back to the order via qr_code_id/webhook.
     const orderId='NB'+Date.now()+Math.floor(Math.random()*100000);
-    const vpa=(await setting('upi_vpa')).trim() || String(process.env.UPI_VPA||'').trim();
-    const payeeName=(await setting('upi_name')).trim() || String(process.env.UPI_NAME||'NISHAD BRAND').trim() || 'NISHAD BRAND';
-    if(!vpa) return res.status(503).json({error:'UPI ID / VPA is not configured. Admin panel → Store Settings में UPI ID डालें।'});
-    const upiUrl='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payeeName)+'&am='+encodeURIComponent(price.toFixed(2))+'&cu=INR&tn='+encodeURIComponent(orderId);
-    const qrImage=await QRCode.toDataURL(upiUrl,{width:420,margin:2,errorCorrectionLevel:'M'});
-    await q('INSERT INTO orders(order_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6)',[orderId,qty,money(price),'created',name,phone]);
-    res.json({orderId,qrImage,upiLink:upiUrl,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000});
+    const amountPaise=money(price);
+    const keyId=String(process.env.RAZORPAY_KEY_ID||'').trim();
+    const keySecret=String(process.env.RAZORPAY_KEY_SECRET||'').trim();
+    let qrImage='', upiLink='', qrCodeId=null;
+
+    if(keyId && keySecret){
+      const closeBy=Math.floor(Date.now()/1000)+300;
+      const qr=await razorpayApi('/payments/qr_codes',{
+        method:'POST',
+        body:JSON.stringify({
+          type:'upi',
+          name:'NISHAD BRAND',
+          usage:'single_use',
+          fixed_amount:true,
+          payment_amount:amountPaise,
+          description:orderId,
+          close_by:closeBy
+        })
+      });
+      qrCodeId=qr.id || null;
+      qrImage=qr.image_url || '';
+      if(!qrImage) throw new Error('Razorpay did not return a QR image');
+      upiLink=qr.upi_link || qr.upi_link_url || '';
+    } else {
+      // Safe fallback for installations using a direct UPI VPA.
+      const vpa=(await setting('upi_vpa')).trim() || String(process.env.UPI_VPA||'').trim();
+      const payeeName=(await setting('upi_name')).trim() || String(process.env.UPI_NAME||'NISHAD BRAND').trim() || 'NISHAD BRAND';
+      if(!vpa) return res.status(503).json({error:'Payment gateway is not configured. Add Razorpay LIVE keys (recommended) or UPI ID / VPA in Admin → Store Settings.'});
+      upiLink='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payeeName)+'&am='+encodeURIComponent(price.toFixed(2))+'&cu=INR&tn='+encodeURIComponent(orderId);
+      qrImage=await QRCode.toDataURL(upiLink,{width:420,margin:2,errorCorrectionLevel:'M'});
+    }
+
+    await q('INSERT INTO orders(order_id,qr_code_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7)',[orderId,qrCodeId,qty,amountPaise,'created',name,phone]);
+    res.json({orderId,qrImage,upiLink,amount:amountPaise,currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000,qrCodeId});
   }catch(e){console.error('Manual order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
 app.post('/api/orders',createOrder);
@@ -276,10 +304,26 @@ app.post('/api/orders/:orderId/utr',async(req,res)=>{
 
 app.get('/api/payment/qr-status/:orderId',async(req,res)=>{
   try{
-    const ord=await q('SELECT order_id,status,utr,payment_id,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
+    const ord=await q('SELECT order_id,qr_code_id,status,utr,payment_id,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
-    const order=ord.rows[0];
+    let order=ord.rows[0];
     if(order.status==='approved' || order.status==='paid') return res.json({status:'approved',...await getOrderItems(order.order_id)});
+
+    // For Razorpay QR orders, poll the QR's payments as a backup to the webhook.
+    // A captured payment changes the order to payment_received; admin approval still
+    // remains mandatory before inventory is released.
+    if(order.qr_code_id && order.status==='created'){
+      try{
+        const payments=await getQrPayments(order.qr_code_id);
+        const captured=payments.find(p=>p.status==='captured' && Number(p.amount)===Number(order.amount_paise));
+        if(captured?.id){
+          await recordQrPayment(order.order_id,captured.id,order.qr_code_id);
+          const fresh=await q('SELECT order_id,qr_code_id,status,utr,payment_id,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
+          order=fresh.rows[0]||order;
+        }
+      }catch(e){ console.warn('QR polling fallback:',e.message); }
+    }
+
     if(order.status==='payment_received') return res.json({status:'pending_approval',order});
     const expiresAt=new Date(order.created_at).getTime()+300000;
     res.json({status:Date.now()>expiresAt?'expired':'pending',expiresAt});

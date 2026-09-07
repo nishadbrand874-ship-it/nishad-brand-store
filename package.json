@@ -1,6 +1,6 @@
 {
   "name": "nishad-brand-id-store",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "NISHAD BRAND ID Store with admin inventory and Razorpay payment verification",
   "main": "server.js",
