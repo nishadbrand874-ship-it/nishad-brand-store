@@ -105,3 +105,8 @@ Razorpay Checkout में UPI और Netbanking रखे गए हैं; Ca
 BUY NOW के बाद payment UI में केवल UPI QR presentation रखा गया है।
 Card/Netbanking/Wallet options को frontend से छिपाया गया है।
 Payment verification server-side रहेगी; verified payment के बाद ही ID release होगी।
+
+## V17 QR IMAGE
+User-provided UPI QR image has been placed at `public/payment-qr.png` for the QR-only payment screen.
+
+IMPORTANT: This is a static QR image. Automatic payment verification and ID release require a server-side payment reconciliation/order-verification mechanism; a static QR alone cannot prove which user paid.
