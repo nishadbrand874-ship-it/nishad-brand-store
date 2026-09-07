@@ -124,3 +124,7 @@ IMPORTANT: This is a static QR image. Automatic payment verification and ID rele
 
 ### V29 QR note
 आपके दिए गए QR से merchant UPI VPA लेकर हर order के लिए नया amount-specific UPI QR बनाया जाता है। 1 ID = ₹1, 5 ID = ₹5, 10 ID = ₹10. UTR field और manual admin approval बरकरार हैं।
+
+
+### UTR Rejection
+Admin kisi payment ko Reject kare to us UTR ko Order Check me search karne par साफ़ “PAYMENT REJECTED” दिखेगा और ID release नहीं होगी.
