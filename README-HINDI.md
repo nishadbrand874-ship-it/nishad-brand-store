@@ -128,3 +128,7 @@ IMPORTANT: This is a static QR image. Automatic payment verification and ID rele
 
 ### UTR Rejection
 Admin kisi payment ko Reject kare to us UTR ko Order Check me search karne par साफ़ “PAYMENT REJECTED” दिखेगा और ID release नहीं होगी.
+
+
+### Price Sync Fix
+Admin Panel → Store Settings → Price per ID अब public website, Custom Quantity, नए orders और UPI QR amount में तुरंत लागू होता है.

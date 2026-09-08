@@ -44,19 +44,18 @@ function money(n){ return Math.round(Number(n)*100); }
 function signToken(){ return jwt.sign({role:'admin'}, process.env.JWT_SECRET, {expiresIn:'7d'}); }
 async function q(text, params=[]){ return pool.query(text, params); }
 async function normalizeStorePrice(){ try {
-  await q("INSERT INTO settings(key,value) VALUES ('price_per_id','1') ON CONFLICT(key) DO UPDATE SET value='1'");
-  await q("INSERT INTO settings(key,value) VALUES ('package_1','1') ON CONFLICT(key) DO UPDATE SET value='1'");
-  await q("INSERT INTO settings(key,value) VALUES ('package_2','2') ON CONFLICT(key) DO UPDATE SET value='2'");
-  await q("INSERT INTO settings(key,value) VALUES ('package_5','5') ON CONFLICT(key) DO UPDATE SET value='5'");
-  await q("INSERT INTO settings(key,value) VALUES ('package_10','10') ON CONFLICT(key) DO UPDATE SET value='10'");
-  await q("INSERT INTO settings(key,value) VALUES ('package_15','15') ON CONFLICT(key) DO UPDATE SET value='15'");
-  await q("INSERT INTO settings(key,value) VALUES ('package_20','20') ON CONFLICT(key) DO UPDATE SET value='20'");
- } catch(e) { console.warn('Price normalization skipped:', e.message); } }
+  const current=await setting('price_per_id');
+  if(!current || !Number.isFinite(Number(current)) || Number(current)<=0){
+    await q("INSERT INTO settings(key,value) VALUES ('price_per_id','1') ON CONFLICT(key) DO NOTHING");
+  }
+ } catch(e) { console.warn('Price initialization skipped:', e.message); } }
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
 async function settings(){ const r=await q('SELECT key,value FROM settings'); return Object.fromEntries(r.rows.map(x=>[x.key,x.value])); }
 function publicSettings(s, stock=0){
-  // Store pricing is fixed at ₹1 per ID. Never inherit an old saved ₹100 price.
-  const basePrice = 1;
+  // Price per ID is controlled from Admin Panel → Store Settings.
+  // Fall back to ₹1 only when no valid price has been saved yet.
+  const savedPrice = Number(s.price_per_id);
+  const basePrice = Number.isFinite(savedPrice) && savedPrice > 0 ? savedPrice : 1;
   const packages = [1,2,5,10,15,20].map(qty=>({
     qty,
     price: Math.round(basePrice * qty * 100) / 100,
@@ -101,8 +100,16 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 
 app.post('/api/admin/settings',auth,async(req,res)=>{
   const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news'];
+  if(req.body.price_per_id!==undefined){
+    const price=Number(req.body.price_per_id);
+    if(!Number.isFinite(price) || price<=0 || price>100000){
+      return res.status(400).json({error:'Invalid price per ID'});
+    }
+    req.body.price_per_id=price.toFixed(2).replace(/\.00$/,'');
+  }
   for(const key of allowed){ if(req.body[key]!==undefined) await q('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',[key,String(req.body[key])]); }
-  res.json({ok:true});
+  const fresh=await settings();
+  res.json({ok:true,pricePerId:Number(fresh.price_per_id)||1});
 });
 app.post('/api/admin/orders/:orderId/approve',auth,async(req,res)=>{
   try{
@@ -142,8 +149,10 @@ app.delete('/api/admin/inventory/:id',auth,async(req,res)=>{ await q("DELETE FRO
 async function createOrder(req,res){
   const qty=Number(req.body.qty), name=(req.body.name||'').trim(), phone=(req.body.phone||'').trim();
   if(!Number.isInteger(qty) || qty < 1 || qty > 1000) return res.status(400).json({error:'Quantity must be between 1 and 1000'});
-  // Fixed storefront price: exactly ₹1 per ID.
-  const basePrice=1;
+  // Use the current Admin Panel price-per-ID for every new order/QR.
+  const s=await settings();
+  const savedPrice=Number(s.price_per_id);
+  const basePrice=Number.isFinite(savedPrice) && savedPrice>0 ? savedPrice : 1;
   const price=Math.round(basePrice * qty * 100) / 100;
   if(!price) return res.status(400).json({error:'Package not configured'});
   const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
