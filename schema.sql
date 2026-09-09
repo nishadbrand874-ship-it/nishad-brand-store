@@ -41,7 +41,7 @@ INSERT INTO settings(key,value) VALUES
 ('whatsapp_number','9296271001'),
 ('logo_data',''),
 ('qr_data',''),
-('news',''),('upi_vpa',''),('upi_name','NISHAD BRAND')
+('news',''),('upi_vpa','Q127502433@ybl'),('upi_name','PhonePeMerchant')
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO settings(key,value) VALUES

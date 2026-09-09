@@ -242,8 +242,8 @@ async function createOrder(req,res){
   // Merchant UPI VPA extracted from the QR supplied by the store owner.
   // A fresh UPI intent QR is generated for every order so the exact amount
   // (quantity × price) is encoded in the QR itself.
-  const vpa=String(s.upi_vpa || process.env.UPI_VPA || '').trim();
-  const payee=String(s.upi_name || process.env.UPI_NAME || 'NISHAD BRAND').trim();
+  const vpa=String(s.upi_vpa || process.env.UPI_VPA || 'Q127502433@ybl').trim();
+  const payee=String(s.upi_name || process.env.UPI_NAME || 'PhonePeMerchant').trim();
   if(!vpa) return res.status(500).json({error:'UPI VPA is not configured'});
 
   try{
