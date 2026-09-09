@@ -132,3 +132,11 @@ Admin kisi payment ko Reject kare to us UTR ko Order Check me search karne par �
 
 ### Price Sync Fix
 Admin Panel → Store Settings → Price per ID अब public website, Custom Quantity, नए orders और UPI QR amount में तुरंत लागू होता है.
+
+
+## V40 Security Update
+- Multer upgraded to 2.x.
+- Inventory encryption key is required in production.
+- Admin asset uploads are restricted to PNG/JPEG/WebP and 1 MB per file.
+- Production responses include HSTS.
+- UPI QR generation uses the configured Store Settings UPI VPA.

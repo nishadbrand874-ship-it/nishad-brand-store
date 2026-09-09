@@ -11,7 +11,61 @@ const crypto = require('crypto');
 const QRCode = require('qrcode');
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 1 * 1024 * 1024, files: 2 },
+  fileFilter: (req, file, cb) => {
+    const allowed = new Set(['image/png','image/jpeg','image/webp']);
+    cb(null, allowed.has(String(file.mimetype || '').toLowerCase()));
+  }
+});
+
+// Security: inventory credentials are encrypted at rest and never returned
+// as a full inventory dump to the browser. Keep INVENTORY_ENCRYPTION_KEY
+// stable in Render Environment Variables; it should be a long random secret.
+const rawInventoryKey = String(process.env.INVENTORY_ENCRYPTION_KEY || '');
+if (process.env.NODE_ENV === 'production' && rawInventoryKey.length < 32) {
+  console.error('INVENTORY_ENCRYPTION_KEY must be set to a random secret of at least 32 characters in production.');
+  process.exit(1);
+}
+const INVENTORY_KEY = crypto.createHash('sha256')
+  .update(rawInventoryKey || String(process.env.JWT_SECRET || ''))
+  .digest();
+function encryptSecret(value){
+  if(value == null || value === '') return value == null ? null : '';
+  const iv=crypto.randomBytes(12);
+  const cipher=crypto.createCipheriv('aes-256-gcm', INVENTORY_KEY, iv);
+  const enc=Buffer.concat([cipher.update(String(value),'utf8'),cipher.final()]);
+  return 'enc:v1:'+iv.toString('base64url')+':'+cipher.getAuthTag().toString('base64url')+':'+enc.toString('base64url');
+}
+function decryptSecret(value){
+  if(value == null || value === '') return value || '';
+  if(!String(value).startsWith('enc:v1:')) return String(value); // legacy row; migration upgrades it
+  const [,v,iv64,tag64,data64]=String(value).split(':');
+  try{
+    const decipher=crypto.createDecipheriv('aes-256-gcm', INVENTORY_KEY, Buffer.from(iv64,'base64url'));
+    decipher.setAuthTag(Buffer.from(tag64,'base64url'));
+    return Buffer.concat([decipher.update(Buffer.from(data64,'base64url')),decipher.final()]).toString('utf8');
+  }catch{return ''}
+}
+function maskSecret(value){
+  const s=String(value||'');
+  if(!s) return '';
+  return s.length<=3 ? '•••' : '••••••••'+s.slice(-3);
+}
+
+// Basic security headers (no extra package required).
+app.disable('x-powered-by');
+app.use((req,res,next)=>{
+  res.set({
+    'X-Content-Type-Options':'nosniff',
+    'X-Frame-Options':'DENY',
+    'Referrer-Policy':'strict-origin-when-cross-origin',
+    'Permissions-Policy':'camera=(), microphone=(), geolocation=()'
+  });
+  if (process.env.NODE_ENV === 'production') res.set('Strict-Transport-Security','max-age=31536000; includeSubDomains');
+  next();
+});
 const PORT = process.env.PORT || 3000;
 if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL is not configured. Add the Render PostgreSQL connection string in Environment Variables.');
@@ -32,6 +86,20 @@ app.get('/', (req,res)=>res.sendFile(path.join(__dirname,'public','index.html'))
 
 app.get('/health', (req,res)=>res.json({ok:true,service:'nishad-brand-store'}));
 
+const loginAttempts=new Map();
+function loginRateLimit(req,res,next){
+  const ip=String(req.headers['x-forwarded-for']||req.ip||'unknown').split(',')[0].trim();
+  const now=Date.now(); const a=loginAttempts.get(ip);
+  if(a && now-a.first<10*60*1000 && a.count>=8) return res.status(429).json({error:'Too many login attempts. Try again later.'});
+  req._loginIp=ip; next();
+}
+function recordLoginFailure(ip){
+  const now=Date.now(); const a=loginAttempts.get(ip);
+  if(!a || now-a.first>=10*60*1000) loginAttempts.set(ip,{first:now,count:1});
+  else a.count++;
+}
+function clearLoginFailures(ip){loginAttempts.delete(ip);}
+
 function auth(req,res,next){
   try {
     const token = req.cookies.nishad_admin;
@@ -43,6 +111,15 @@ function auth(req,res,next){
 function money(n){ return Math.round(Number(n)*100); }
 function signToken(){ return jwt.sign({role:'admin'}, process.env.JWT_SECRET, {expiresIn:'7d'}); }
 async function q(text, params=[]){ return pool.query(text, params); }
+async function migrateInventoryEncryption(){
+  // Upgrade legacy plaintext inventory rows once. Only the server can decrypt them.
+  const r=await q("SELECT id,login_id,login_password,extra_data FROM inventory WHERE login_id NOT LIKE 'enc:v1:%' OR (login_password IS NOT NULL AND login_password NOT LIKE 'enc:v1:%') OR (extra_data IS NOT NULL AND extra_data NOT LIKE 'enc:v1:%') LIMIT 1000");
+  for(const row of r.rows){
+    await q('UPDATE inventory SET login_id=$1,login_password=$2,extra_data=$3 WHERE id=$4',[encryptSecret(row.login_id),encryptSecret(row.login_password),encryptSecret(row.extra_data),row.id]);
+  }
+  if(r.rows.length) console.log(`Encrypted ${r.rows.length} legacy inventory records.`);
+}
+
 async function normalizeStorePrice(){ try {
   const current=await setting('price_per_id');
   if(!current || !Number.isFinite(Number(current)) || Number(current)<=0){
@@ -65,6 +142,8 @@ function publicSettings(s, stock=0){
 }
 
 app.get('/api/config', async (req,res)=>{
+  res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma','no-cache');
   try {
     const s=await settings();
     const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
@@ -72,12 +151,13 @@ app.get('/api/config', async (req,res)=>{
   } catch(e){ console.error('Config error:',e); res.status(500).json({error:'Server error'}); }
 });
 
-app.post('/api/admin/login', async (req,res)=>{
+app.post('/api/admin/login', loginRateLimit, async (req,res)=>{
   const {username,password}=req.body||{};
   const okUser=username===process.env.ADMIN_USERNAME;
   const configured=process.env.ADMIN_PASSWORD||'';
   const okPass=configured.startsWith('$2') ? await bcrypt.compare(password||'',configured) : password===configured;
-  if(!okUser || !okPass) return res.status(401).json({error:'Invalid login'});
+  if(!okUser || !okPass){ recordLoginFailure(req._loginIp); return res.status(401).json({error:'Invalid login'}); }
+  clearLoginFailures(req._loginIp);
   res.cookie('nishad_admin',signToken(),{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',maxAge:7*24*3600*1000});
   res.json({ok:true});
 });
@@ -85,11 +165,12 @@ app.post('/api/admin/logout',(req,res)=>{res.clearCookie('nishad_admin');res.jso
 app.get('/api/admin/me',auth,(req,res)=>res.json({ok:true}));
 
 app.get('/api/admin/dashboard',auth,async(req,res)=>{
+  res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
   const s=await settings();
   const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   const sold=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='sold'");
   const orders=await q("SELECT order_id,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
-  const inv=await q("SELECT id,login_id,login_password,extra_data,status,sold_order_id,created_at FROM inventory ORDER BY id DESC LIMIT 500");
+  const inv=await q("SELECT id,status,sold_order_id,created_at FROM inventory ORDER BY id DESC LIMIT 500");
   const today=await q(`SELECT
     (SELECT COUNT(*)::int FROM inventory WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status='sold') AS today_sold_ids,
     (SELECT COUNT(*)::int FROM inventory WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) AS today_ids_added,
@@ -141,7 +222,7 @@ app.post('/api/admin/inventory',auth,async(req,res)=>{
   const rows=Array.isArray(req.body.items)?req.body.items:[];
   if(!rows.length) return res.status(400).json({error:'No IDs provided'});
   const client=await pool.connect();
-  try{ await client.query('BEGIN'); for(const item of rows){ if(!item.login_id) continue; await client.query('INSERT INTO inventory(login_id,login_password,extra_data) VALUES($1,$2,$3)',[item.login_id,item.login_password||null,item.extra_data||null]); } await client.query('COMMIT'); res.json({ok:true}); }
+  try{ await client.query('BEGIN'); for(const item of rows){ if(!item.login_id) continue; await client.query('INSERT INTO inventory(login_id,login_password,extra_data) VALUES($1,$2,$3)',[encryptSecret(item.login_id),encryptSecret(item.login_password||null),encryptSecret(item.extra_data||null)]); } await client.query('COMMIT'); res.json({ok:true}); }
   catch(e){await client.query('ROLLBACK');res.status(500).json({error:'Could not add inventory'});} finally{client.release();}
 });
 app.delete('/api/admin/inventory/:id',auth,async(req,res)=>{ await q("DELETE FROM inventory WHERE id=$1 AND status='available'",[req.params.id]); res.json({ok:true}); });
@@ -161,8 +242,9 @@ async function createOrder(req,res){
   // Merchant UPI VPA extracted from the QR supplied by the store owner.
   // A fresh UPI intent QR is generated for every order so the exact amount
   // (quantity × price) is encoded in the QR itself.
-  const vpa='Q127502433@ybl';
-  const payee='PhonePeMerchant';
+  const vpa=String(s.upi_vpa || process.env.UPI_VPA || '').trim();
+  const payee=String(s.upi_name || process.env.UPI_NAME || 'NISHAD BRAND').trim();
+  if(!vpa) return res.status(500).json({error:'UPI VPA is not configured'});
 
   try{
     const orderId='NB'+Date.now()+Math.floor(Math.random()*100000);
@@ -203,7 +285,7 @@ app.get('/api/payment/qr-status/:orderId',async(req,res)=>{
     const ord=await q('SELECT order_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
     const order=ord.rows[0];
-    if(order.status==='approved' || order.status==='paid') return res.json({status:'approved',...await getOrderItems(order.order_id)});
+    if(order.status==='approved' || order.status==='paid') return res.json({status:'approved',order:{order_id:order.order_id,package_qty:order.package_qty,amount_paise:order.amount_paise,utr:order.utr,fulfilled_at:order.fulfilled_at}});
     if(order.status==='payment_received') return res.json({status:'pending_approval',order});
     if(order.status==='rejected') return res.json({status:'rejected',order});
     const expiresAt=new Date(order.created_at).getTime()+300000;
@@ -219,7 +301,7 @@ async function fulfillManual(orderId){
     if(!ord.rows[0]) throw new Error('Order not found');
     if(ord.rows[0].status==='approved' || ord.rows[0].status==='paid'){ await client.query('COMMIT'); return; }
     if(ord.rows[0].status!=='payment_received' || !ord.rows[0].utr) throw new Error('UTR/payment is still pending');
-    const items=await client.query("SELECT id,login_id,login_password,extra_data FROM inventory WHERE status='available' ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $1",[ord.rows[0].package_qty]);
+    const items=await client.query("SELECT id FROM inventory WHERE status='available' ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $1",[ord.rows[0].package_qty]);
     if(items.rows.length<ord.rows[0].package_qty){ await client.query('ROLLBACK'); throw new Error('Insufficient stock at fulfillment'); }
     for(const item of items.rows){
       await client.query("UPDATE inventory SET status='sold',sold_order_id=$1,reserved_order_id=NULL WHERE id=$2",[orderId,item.id]);
@@ -231,22 +313,24 @@ async function fulfillManual(orderId){
 }
 
 async function getOrderItems(utrOrOrder){
-  const ord=await q('SELECT order_id,status,package_qty,amount_paise,payment_id,utr,created_at,fulfilled_at FROM orders WHERE order_id=$1 OR utr=$1 OR payment_id=$1 ORDER BY created_at DESC LIMIT 1',[utrOrOrder]);
+  const ord=await q('SELECT order_id,status,package_qty,amount_paise,payment_id,utr,created_at,fulfilled_at FROM orders WHERE utr=$1 ORDER BY created_at DESC LIMIT 1',[utrOrOrder]);
   if(!ord.rows[0]) return {found:false};
   const order=ord.rows[0];
   if(order.status==='approved' || order.status==='paid'){
     const items=await q('SELECT i.login_id,i.login_password,i.extra_data FROM order_items oi JOIN inventory i ON i.id=oi.inventory_id WHERE oi.order_id=$1 ORDER BY i.id',[order.order_id]);
-    return {found:true,status:'approved',order,items:items.rows};
+    const safeItems=items.rows.map(i=>({login_id:decryptSecret(i.login_id),login_password:decryptSecret(i.login_password),extra_data:decryptSecret(i.extra_data)}));
+    return {found:true,status:'approved',order,items:safeItems};
   }
   return {found:true,status:order.status==='rejected'?'rejected':'pending',order,items:[]};
 }
-app.get('/api/order-check/:utr',async(req,res)=>{ try{res.json(await getOrderItems(req.params.utr.trim()));}catch{res.status(500).json({error:'Server error'});} });
+app.get('/api/order-check/:utr',async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(utr.length<4 || utr.length>100) return res.status(400).json({error:'Invalid UTR'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
 
 app.get('/admin', (req,res)=>res.sendFile(path.join(__dirname,'public','admin.html')));
 
 (async()=>{
   try{
     await q(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
+    await migrateInventoryEncryption();
     await normalizeStorePrice();
     app.listen(PORT,()=>console.log(`NISHAD BRAND running on ${PORT}`));
   }catch(e){ console.error('Startup DB error:',e); process.exit(1); }

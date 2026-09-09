@@ -41,3 +41,5 @@ body{background:radial-gradient(circle at 10% 0%,rgba(59,130,246,.28),transparen
 .login-submit{height:46px;width:100%;margin-top:12px!important;font-size:14px}
 @media(max-width:900px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.stats{grid-template-columns:1fr 1fr;gap:9px}.stat{min-height:92px;padding:12px}.stat b{font-size:24px}.stat small{font-size:9px}.login-panel{padding:22px!important}.login-brand img{width:56px;height:56px}.login-brand b{font-size:18px}}
+
+.secure-note{margin:12px 0;padding:10px 12px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;font-size:13px;font-weight:700;color:#166534}

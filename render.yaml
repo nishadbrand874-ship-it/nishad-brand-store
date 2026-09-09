@@ -21,7 +21,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
         sync: false
-        sync: false
+      - key: INVENTORY_ENCRYPTION_KEY
         sync: false
       - key: WHATSAPP_NUMBER
         value: "9296271001"

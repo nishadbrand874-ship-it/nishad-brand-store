@@ -5,7 +5,7 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;',
 function money(n){return Number(n||0).toLocaleString('en-IN');}
 async function init(){
   try{
-    const r=await fetch('/api/config'); config=await r.json(); if(!r.ok) throw new Error(config.error||'Configuration failed');
+    const r=await fetch('/api/config?ts='+Date.now(),{cache:'no-store'}); config=await r.json(); if(!r.ok) throw new Error(config.error||'Configuration failed');
     $('siteName').textContent=config.siteName||'NISHAD BRAND'; $('logo').src=config.logo||'/logo.png';
     $('wa').href='https://wa.me/'+String(config.whatsapp||'').replace(/\D/g,'');
     const sb=$('stockBanner'); if(sb){ sb.className='stock-banner '+(Number(config.stock||0)>0?'in':'out'); sb.innerHTML=Number(config.stock||0)>0?'✓ STOCK AVAILABLE • '+Number(config.stock)+' ID AVAILABLE':'✕ OUT OF STOCK'; }
@@ -20,14 +20,14 @@ async function init(){
 function updateCustomTotal(){const el=$('customQty'),total=$('customTotal');if(!el||!total||!config)return;const raw=String(el.value||'').trim();if(!raw){total.textContent='₹0';return;}let qty=Math.floor(Number(raw));if(!Number.isFinite(qty)||qty<1){total.textContent='₹0';return;}const stock=Number(config.stock||0);if(stock>0&&qty>stock){total.textContent='₹'+money(Number(config.pricePerId||0)*stock)+' (max '+stock+')';return;}total.textContent='₹'+money(Number(config.pricePerId||0)*qty);}
 function normalizeCustomQty(){const el=$('customQty');if(!el||!config)return;const stock=Number(config.stock||0);let qty=Math.floor(Number(el.value)||0);if(stock<=0){el.value='';$('customTotal').textContent='₹0';return;}qty=Math.max(1,Math.min(stock,qty||1));el.value=qty;updateCustomTotal();}
 function buyCustom(){const el=$('customQty');const qty=Math.floor(Number(el?.value)||0);const stock=Number(config?.stock||0);if(!qty||qty<1||qty>stock)return;openPay(qty,Number(config.pricePerId||0)*qty);}
-function openPay(qty,price){price=Number(qty||0);selected={qty,price};$('qrDownload').classList.add('hidden');$('qrDownload').removeAttribute('href');$('payText').textContent=qty+' ID package — ₹'+money(price);$('qrBox').classList.add('hidden');$('payStatus').textContent='QR तैयार हो रहा है…';$('modal').classList.remove('hidden');startQrPayment();}
+function openPay(qty,price){price=Number(price||0);selected={qty,price};$('qrDownload').classList.add('hidden');$('qrDownload').removeAttribute('href');$('payText').textContent=qty+' ID package — ₹'+money(price);$('qrBox').classList.add('hidden');$('payStatus').textContent='QR तैयार हो रहा है…';$('modal').classList.remove('hidden');startQrPayment();}
 function closePay(){stopPolling();$('modal').classList.add('hidden');}
 async function startQrPayment(){
   stopPolling();
   try{
     const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qty:selected.qty,name:'',phone:''})});
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'QR create failed');
-    $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').href=d.upiLink||'#'; $('upiOpen').classList.toggle('hidden',!d.upiLink); $('payText').textContent=d.quantity+' ID package — ₹'+money(Number(d.quantity||selected.qty)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.quantity||selected.qty))+'</b><br>QR scan karke payment karein. Payment ke baad UTR / Transaction ID neeche submit karein. Admin approval ke baad ID release hogi.'; $('utrBox').classList.remove('hidden');
+    $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').href=d.upiLink||'#'; $('upiOpen').classList.toggle('hidden',!d.upiLink); $('payText').textContent=d.quantity+' ID package — ₹'+money(Number(d.amount||selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.quantity||selected.qty))+'</b><br>QR scan karke payment karein. Payment ke baad UTR / Transaction ID neeche submit karein. Admin approval ke baad ID release hogi.'; $('utrBox').classList.remove('hidden');
     startCountdown(Number(d.expiresAt||Date.now()+300000));
     window.currentOrderId=d.orderId; pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000); await checkQrStatus(d.orderId);
   }catch(e){$('payStatus').innerHTML='<div class="error">'+esc(e.message)+'</div>';}
