@@ -311,7 +311,7 @@ app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,re
     const orderId=String(req.params.orderId||'').trim();
     const orderToken=String(req.headers['x-order-token']||'').trim();
     const utr=String(req.body?.utr||'').trim().replace(/\s+/g,'');
-    if(!orderId || !utr || utr.length<4 || utr.length>100) return res.status(400).json({error:'Please enter a valid UTR / Transaction ID'});
+    if(!orderId || !utr || !/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'UTR / Transaction ID must be 8–35 letters or digits (no spaces/symbols)'});
     const ord=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
     const order=ord.rows[0];
@@ -327,8 +327,12 @@ app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,re
       if(latest.rows[0]?.status==='payment_received') return res.json({ok:true,status:'pending_approval',order:latest.rows[0]});
       return res.status(400).json({error:'Order cannot accept UTR in its current state'});
     }
-    res.json({ok:true,status:'pending_approval',order:r.rows[0]});
-  }catch(e){console.error('UTR submit error:',e);res.status(500).json({error:'Could not submit UTR'});}
+    res.json({ok:true,status:'pending_approval',order:r.rows[0],message:'UTR recorded. Admin must verify the payment and approve it before IDs are released.'});
+  }catch(e){
+    console.error('UTR submit error:',e);
+    if(e && e.code==='23505' && String(e.constraint||'').includes('orders_utr_unique')) return res.status(409).json({error:'This UTR has already been submitted and cannot be reused.'});
+    res.status(500).json({error:'Could not submit UTR'});
+  }
 });
 
 app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(req,res)=>{
@@ -377,7 +381,7 @@ async function getOrderItems(utr){
   if(order.status==='approved' || order.status==='paid') return {found:true,status:'approved',order:publicOrder,items:await getApprovedItems(order.order_id)};
   return {found:true,status:order.status==='rejected'?'rejected':'pending',order:publicOrder,items:[]};
 }
-app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(utr.length<4 || utr.length>100) return res.status(400).json({error:'Invalid UTR'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
+app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
 
 app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile(path.join(__dirname,'public','admin.html')); });
 
