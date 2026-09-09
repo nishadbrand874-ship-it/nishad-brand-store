@@ -21,7 +21,7 @@ function updateCustomTotal(){const el=$('customQty'),total=$('customTotal');if(!
 function normalizeCustomQty(){const el=$('customQty');if(!el||!config)return;const stock=Number(config.stock||0);let qty=Math.floor(Number(el.value)||0);if(stock<=0){el.value='';$('customTotal').textContent='₹0';return;}qty=Math.max(1,Math.min(stock,qty||1));el.value=qty;updateCustomTotal();}
 function buyCustom(){const el=$('customQty');const qty=Math.floor(Number(el?.value)||0);const stock=Number(config?.stock||0);if(!qty||qty<1||qty>stock)return;openPay(qty,Number(config.pricePerId||0)*qty);}
 function openPay(qty,price){price=Number(price||0);selected={qty,price};$('qrDownload').classList.add('hidden');$('qrDownload').removeAttribute('href');$('payText').textContent=qty+' ID package — ₹'+money(price);$('qrBox').classList.add('hidden');$('payStatus').textContent='QR तैयार हो रहा है…';$('modal').classList.remove('hidden');startQrPayment();}
-function closePay(){stopPolling();$('modal').classList.add('hidden');}
+function closePay(){stopPolling();window.currentOrderId='';window.currentOrderToken='';$('modal').classList.add('hidden');}
 async function startQrPayment(){
   stopPolling();
   try{
@@ -29,7 +29,7 @@ async function startQrPayment(){
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'QR create failed');
     $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').href=d.upiLink||'#'; $('upiOpen').classList.toggle('hidden',!d.upiLink); $('payText').textContent=d.quantity+' ID — ₹'+money(Number(d.amount!=null?d.amount/100:selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.quantity||selected.qty))+'</b><br>QR scan karke payment karein. Payment ke baad UTR / Transaction ID neeche submit karein. Admin approval ke baad ID release hogi.'; $('utrBox').classList.remove('hidden');
     startCountdown(Number(d.expiresAt||Date.now()+300000));
-    window.currentOrderId=d.orderId; pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000); await checkQrStatus(d.orderId);
+    window.currentOrderId=d.orderId; window.currentOrderToken=d.orderToken||''; pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000); await checkQrStatus(d.orderId);
   }catch(e){$('payStatus').innerHTML='<div class="error">'+esc(e.message)+'</div>';}
 }
 async function submitUTR(){
@@ -39,7 +39,7 @@ async function submitUTR(){
   if(!orderId){$('utrMsg').innerHTML='<div class="error">Order session नहीं मिला. Buy Now फिर से करें.</div>';return;}
   $('utrBtn').disabled=true;$('utrMsg').textContent='Submitting…';
   try{
-    const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({utr})});
+    const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':String(window.currentOrderToken||'')},body:JSON.stringify({utr})});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'UTR submit failed');
     $('utrMsg').innerHTML='<div class="pending"><b>Payment submitted.</b><br>Admin approval pending. Approval ke baad ID yahin milegi.</div>';
@@ -49,7 +49,7 @@ async function submitUTR(){
 }
 async function checkQrStatus(orderId){
   try{
-    const r=await fetch('/api/payment/qr-status/'+encodeURIComponent(orderId),{cache:'no-store'}); const d=await r.json();
+    const r=await fetch('/api/payment/qr-status/'+encodeURIComponent(orderId),{cache:'no-store',headers:{'X-Order-Token':String(window.currentOrderToken||'')}}); const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Verification failed');
     if(d.status==='approved' || d.status==='paid'){stopPolling();showIDs(d.items,d.order);return;}
     if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="pending"><b>Payment received ✓</b><br>Admin approval pending. Approval ke baad hi ID release hogi.<br><small>Payment details securely hidden.</small></div>'; return; }
