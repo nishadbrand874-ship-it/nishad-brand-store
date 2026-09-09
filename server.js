@@ -139,6 +139,17 @@ function auth(req,res,next){
 function money(n){ return Math.round(Number(n)*100); }
 function signToken(){ return jwt.sign({role:'admin',jti:crypto.randomBytes(16).toString('hex')}, process.env.JWT_SECRET, {expiresIn:'2h'}); }
 async function q(text, params=[]){ return pool.query(text, params); }
+async function migrateOrdersSchema(){
+  // Backward-compatible migration for existing databases created before qr_code_id was added.
+  // CREATE TABLE IF NOT EXISTS does not modify an already-existing orders table.
+  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS qr_code_id TEXT');
+  try {
+    await q('CREATE UNIQUE INDEX IF NOT EXISTS orders_qr_code_id_unique ON orders(qr_code_id) WHERE qr_code_id IS NOT NULL');
+  } catch (e) {
+    console.warn('QR code index migration skipped:', e.message);
+  }
+}
+
 async function migrateInventoryEncryption(){
   // Upgrade legacy plaintext inventory rows once. Only the server can decrypt them.
   const r=await q("SELECT id,login_id,login_password,extra_data FROM inventory WHERE login_id NOT LIKE 'enc:v1:%' OR (login_password IS NOT NULL AND login_password NOT LIKE 'enc:v1:%') OR (extra_data IS NOT NULL AND extra_data NOT LIKE 'enc:v1:%') LIMIT 1000");
@@ -373,6 +384,7 @@ app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile
 (async()=>{
   try{
     await q(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
+    await migrateOrdersSchema();
     await migrateInventoryEncryption();
     await normalizeStorePrice();
     app.listen(PORT,()=>console.log(`NISHAD BRAND running on ${PORT}`));

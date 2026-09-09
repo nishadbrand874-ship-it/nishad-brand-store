@@ -29,3 +29,7 @@ Keep these only in Render Environment Variables, never in the ZIP/repository:
 - `UPI_VPA`
 
 `INVENTORY_ENCRYPTION_KEY` must remain stable. Do not change it after encrypted inventory exists unless you perform a controlled key rotation/migration.
+
+## V44.1 database compatibility fix
+
+Added a startup migration that creates `orders.qr_code_id` on existing databases when the column is missing. This fixes the production error `column "qr_code_id" of relation "orders" does not exist` without requiring existing order data to be recreated.
