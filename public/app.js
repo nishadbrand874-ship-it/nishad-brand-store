@@ -27,7 +27,7 @@ async function startQrPayment(){
   try{
     const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qty:selected.qty,name:'',phone:''})});
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'QR create failed');
-    $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').classList.add('hidden'); $('payText').textContent=d.quantity+' ID — ₹'+money(Number(d.amount!=null?d.amount/100:selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.amount||0)/100)+'</b><br>QR scan karke E Pay secure payment page par payment complete karein. E Pay payment ko server-side automatically verify karega. Successful verification ke baad ID automatically release hogi.'; $('utrBox').classList.add('hidden');
+    $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').classList.add('hidden'); $('payText').textContent=d.quantity+' ID — ₹'+money(Number(d.amount!=null?d.amount/100:selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.amount||0)/100)+'</b><br>QR scan karke E Pay secure payment page par payment complete karein. E Pay checkout me UTR / Reference No. submit karne ke baad E Pay confirmation aayega. Website sirf E Pay ke confirmed status par ID release karegi.'; $('utrBox').classList.remove('hidden'); $('utrMsg').innerHTML='<small>E Pay checkout page par UTR submit karna preferred hai. Neeche wala field sirf fallback record ke liye hai; UTR se akela ID release nahi hogi.</small>'; $('utrInput').value=''; $('utrBtn').disabled=false;
     startCountdown(Number(d.expiresAt||Date.now()+300000));
     window.currentOrderId=d.orderId; window.currentOrderToken=d.orderToken||''; await checkQrStatus(d.orderId); setTimeout(()=>checkQrStatus(d.orderId),1000); pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000);
   }catch(e){$('payStatus').innerHTML='<div class="error">'+esc(e.message)+'</div>';}
@@ -42,7 +42,7 @@ async function submitUTR(){
     const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':String(window.currentOrderToken||'')},body:JSON.stringify({utr})});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'UTR submit failed');
-    $('utrMsg').innerHTML='<div class="pending"><b>Payment submitted.</b><br>Automatic E Pay verification chal rahi hai. Successful payment ke baad ID yahin release hogi.</div>';
+    $('utrMsg').innerHTML='<div class="pending"><b>UTR recorded.</b><br>E Pay se actual payment confirmation check ho rahi hai. Sirf UTR submit karne se ID release nahi hogi.</div>';
     $('utrBtn').disabled=true;
     await checkQrStatus(orderId);
   }catch(e){$('utrMsg').innerHTML='<div class="error">'+esc(e.message)+'</div>';$('utrBtn').disabled=false;}

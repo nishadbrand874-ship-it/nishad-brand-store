@@ -146,6 +146,7 @@ async function migrateOrdersSchema(){
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS qr_code_id TEXT');
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS epay_order_id TEXT');
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS epay_status TEXT');
+  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS epay_status_url TEXT');
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT');
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS utr TEXT');
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMPTZ');
@@ -219,7 +220,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
   const s=await settings();
   const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   const sold=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='sold'");
-  const orders=await q("SELECT order_id,epay_order_id,epay_status,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
+  const orders=await q("SELECT order_id,epay_order_id,epay_status,epay_status_url,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
   const inv=await q("SELECT id,status,sold_order_id,created_at FROM inventory ORDER BY id DESC LIMIT 500");
   const today=await q(`SELECT
     (SELECT COUNT(*)::int FROM inventory WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status='sold') AS today_sold_ids,
@@ -290,15 +291,23 @@ async function epayCreateOrder({amount,name,phone,orderId}){
   if(!r.ok || d.success===false || !d.order_id) throw new Error(d.error||d.message||'E Pay order creation failed');
   return d;
 }
-async function epayCheckStatus(epayOrderId){
+async function epayCheckStatus(epayOrderId,statusUrl){
   const key=String(process.env.EPAY_MERCHANT_KEY||'').trim();
   if(!key || !epayOrderId) return null;
-  const url=EPAY_BASE_URL+'/api/merchant.php?action=status&order_id='+encodeURIComponent(epayOrderId);
-  const r=await fetch(url,{method:'GET',headers:{'X-MERCHANT-KEY':key,'Accept':'application/json'}});
-  const text=await r.text();
-  let d={}; try{ d=text ? JSON.parse(text) : {}; }catch{ throw new Error('E Pay returned a non-JSON status response (HTTP '+r.status+')'); }
-  if(!r.ok || d.success===false) throw new Error(d.error||d.message||('E Pay status HTTP '+r.status));
-  return d;
+  const urls=[];
+  if(statusUrl) urls.push(String(statusUrl));
+  urls.push(EPAY_BASE_URL+'/api/merchant.php?action=status&order_id='+encodeURIComponent(epayOrderId));
+  let lastError=null;
+  for(const url of urls){
+    try{
+      const r=await fetch(url,{method:'GET',headers:{'X-MERCHANT-KEY':key,'Accept':'application/json'}});
+      const text=await r.text();
+      let d={}; try{ d=text ? JSON.parse(text) : {}; }catch{ throw new Error('E Pay returned a non-JSON status response (HTTP '+r.status+')'); }
+      if(!r.ok || d.success===false) throw new Error(d.error||d.message||('E Pay status HTTP '+r.status));
+      return d;
+    }catch(e){ lastError=e; }
+  }
+  throw lastError || new Error('E Pay status check failed');
 }
 function extractEpayPaymentId(d, fallbackOrderId){
   return String(d?.utr||d?.rrn||d?.payment_id||d?.transaction_id||d?.txn_id||('EPAY:'+fallbackOrderId)||'').trim();
@@ -310,7 +319,7 @@ async function verifyAndRelease(orderId){
   if(order.status==='approved'||order.status==='paid') return {status:'approved',items:await getApprovedItems(orderId),order};
   if(!order.epay_order_id || !String(process.env.EPAY_MERCHANT_KEY||'').trim()) return {status:order.status==='payment_received'?'pending_approval':'pending'};
 
-  const d=await epayCheckStatus(order.epay_order_id);
+  const d=await epayCheckStatus(order.epay_order_id, order.epay_status_url);
   const gatewayStatus=String(d?.status||d?.payment_status||'').trim().toUpperCase();
   const confirmed=d?.is_confirmed===true || ['TXN_SUCCESS','SUCCESS','PAID','CAPTURED','COMPLETED','CONFIRMED'].includes(gatewayStatus);
   const expectedAmount=Number(order.amount_paise)/100;
@@ -386,8 +395,8 @@ async function createOrder(req,res){
       upiLink=String(paymentTarget);
       qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
     }
-    await q('INSERT INTO orders(order_id,qr_code_id,epay_order_id,epay_status,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[orderId,orderTokenHash,epay?.order_id||null,epay?.status||'created',qty,money(price),'created',name,phone]);
-    res.json({orderId,orderToken,epayOrderId:epay?.order_id||null,qrImage,upiLink,paymentUrl:epay?.payment_url||epay?.checkout_url||null,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000,autoVerify:!!epay});
+    await q('INSERT INTO orders(order_id,qr_code_id,epay_order_id,epay_status,epay_status_url,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[orderId,orderTokenHash,epay?.order_id||null,epay?.status||'created',epay?.status_url||null,qty,money(price),'created',name,phone]);
+    res.json({orderId,orderToken,epayOrderId:epay?.order_id||null,qrImage,upiLink,paymentUrl:epay?.payment_url||epay?.checkout_url||null,statusUrl:epay?.status_url||null,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000,autoVerify:!!epay});
   }catch(e){console.error('E Pay order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
 app.post('/api/orders', rateLimit(apiHits,60*1000,20), createOrder);
@@ -440,13 +449,13 @@ app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,re
 
 app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(req,res)=>{
   try{
-    const ord=await q('SELECT order_id,qr_code_id,epay_order_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
+    const ord=await q('SELECT order_id,qr_code_id,epay_order_id,epay_status_url,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
     const order=ord.rows[0];
     if(!verifyOrderToken(order,String(req.headers['x-order-token']||''))) return res.status(403).json({error:'Invalid order session'});
     if(order.epay_order_id && String(process.env.EPAY_MERCHANT_KEY||'').trim() && !['approved','paid','rejected'].includes(order.status)){
       try{ await verifyAndRelease(order.order_id); }catch(e){ console.warn('E Pay QR verification:',e.message); }
-      const fresh=await q('SELECT order_id,qr_code_id,epay_order_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
+      const fresh=await q('SELECT order_id,qr_code_id,epay_order_id,epay_status_url,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
       if(fresh.rows[0]) Object.assign(order,fresh.rows[0]);
     }
     const publicOrder={order_id:order.order_id,package_qty:order.package_qty,amount_paise:order.amount_paise,status:order.status,created_at:order.created_at,fulfilled_at:order.fulfilled_at};
@@ -509,6 +518,10 @@ app.get('/payment-success', async(req,res)=>{
         const byEpay=await q('SELECT order_id FROM orders WHERE epay_order_id=$1 LIMIT 1',[suppliedId]);
         if(byEpay.rows[0]) localOrderId=byEpay.rows[0].order_id;
       }
+    }
+    const returnedUtr=String(req.query.utr||req.query.transaction_id||req.query.txn_id||'').trim().replace(/\s+/g,'');
+    if(localOrderId && returnedUtr && /^[A-Za-z0-9]{8,35}$/.test(returnedUtr)){
+      await q("UPDATE orders SET utr=COALESCE(NULLIF($1,''),utr),payment_id=COALESCE(NULLIF($1,''),payment_id) WHERE order_id=$2 AND status NOT IN ('approved','paid','rejected')",[returnedUtr,localOrderId]);
     }
     if(localOrderId && String(process.env.EPAY_MERCHANT_KEY||'').trim()) await verifyAndRelease(localOrderId);
   }catch(e){ console.warn('E Pay return verification:',e.message); }
