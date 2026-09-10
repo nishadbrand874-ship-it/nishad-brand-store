@@ -267,6 +267,48 @@ app.post('/api/admin/inventory',auth,async(req,res)=>{
 });
 app.delete('/api/admin/inventory/:id',auth,async(req,res)=>{ await q("DELETE FROM inventory WHERE id=$1 AND status='available'",[req.params.id]); res.json({ok:true}); });
 
+// E Pay automatic verification: gateway credentials stay server-side.
+const EPAY_BASE_URL = String(process.env.EPAY_BASE_URL || 'https://epay.xevro.fun').replace(/\/$/, '');
+function epayHeaders(){ return {'Content-Type':'application/json','X-MERCHANT-KEY':String(process.env.EPAY_MERCHANT_KEY||'')}; }
+async function epayCreateOrder({amount,name,phone,orderId}){
+  const key=String(process.env.EPAY_MERCHANT_KEY||'').trim(); if(!key) return null;
+  const base=String(process.env.PUBLIC_BASE_URL||'').replace(/\/$/,'');
+  const payload={action:'create_order',amount:Number(amount),customer_name:name||'NISHAD BRAND Customer',customer_mobile:phone||'',return_url:base+'/payment-success?order_id='+encodeURIComponent(orderId),webhook_url:base+'/api/payment/webhook'};
+  const r=await fetch(EPAY_BASE_URL+'/api/merchant.php',{method:'POST',headers:epayHeaders(),body:JSON.stringify(payload)});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok || d.success===false || !d.order_id) throw new Error(d.error||d.message||'E Pay order creation failed');
+  return d;
+}
+async function epayCheckStatus(epayOrderId){
+  const key=String(process.env.EPAY_MERCHANT_KEY||'').trim(); if(!key || !epayOrderId) return null;
+  const url=EPAY_BASE_URL+'/api/merchant.php?action=status&order_id='+encodeURIComponent(epayOrderId);
+  const r=await fetch(url,{method:'GET',headers:{'X-MERCHANT-KEY':key}});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error||d.message||('E Pay status HTTP '+r.status));
+  return d;
+}
+async function verifyAndRelease(orderId){
+  const row=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]); if(!row.rows[0]) return {status:'not_found'};
+  const order=row.rows[0];
+  if(order.status==='approved'||order.status==='paid') return {status:'approved',items:await getApprovedItems(orderId),order};
+  if(!order.epay_order_id || !String(process.env.EPAY_MERCHANT_KEY||'').trim()) return {status:order.status==='payment_received'?'pending_approval':'pending'};
+  const d=await epayCheckStatus(order.epay_order_id);
+  const gatewayStatus=String(d?.status||'').toUpperCase();
+  const confirmed=d?.is_confirmed===true || gatewayStatus==='TXN_SUCCESS' || gatewayStatus==='SUCCESS' || gatewayStatus==='PAID' || gatewayStatus==='CAPTURED';
+  const gatewayAmount=Number(d?.amount), expectedAmount=Number(order.amount_paise)/100;
+  if(!confirmed){ await q("UPDATE orders SET epay_status=$1 WHERE order_id=$2 AND status NOT IN ('approved','paid')",[gatewayStatus||String(d?.status||'unknown'),orderId]); return {status:(gatewayStatus==='FAILED'||gatewayStatus==='CANCELLED')?'failed':'pending'}; }
+  if(Number.isFinite(gatewayAmount) && Math.abs(gatewayAmount-expectedAmount)>0.01){ console.warn('E Pay amount mismatch',orderId,gatewayAmount,expectedAmount); return {status:'amount_mismatch'}; }
+  const paymentId=String(d?.utr||d?.payment_id||d?.transaction_id||'').trim();
+  await q("UPDATE orders SET epay_status=$1,payment_id=COALESCE(NULLIF($2,''),payment_id),utr=COALESCE(NULLIF($2,''),utr),status=CASE WHEN status='created' THEN 'payment_received' ELSE status END WHERE order_id=$3 AND status NOT IN ('approved','paid','rejected')",[gatewayStatus||'TXN_SUCCESS',paymentId,orderId]);
+  await fulfillManual(orderId);
+  const items=await getApprovedItems(orderId), fresh=(await q('SELECT * FROM orders WHERE order_id=$1',[orderId])).rows[0];
+  return {status:'approved',items,order:fresh};
+}
+async function autoVerifyPending(){
+  if(!String(process.env.EPAY_MERCHANT_KEY||'').trim()) return;
+  try{ const r=await q("SELECT order_id FROM orders WHERE status IN ('created','payment_received') AND epay_order_id IS NOT NULL AND created_at > NOW()-INTERVAL '10 minutes' ORDER BY created_at ASC LIMIT 20"); for(const row of r.rows){ try{await verifyAndRelease(row.order_id);}catch(e){console.warn('E Pay auto-verify:',row.order_id,e.message);} } }catch(e){console.warn('Auto verify query:',e.message);}
+}
+
 async function createOrder(req,res){
   const qty=Number(req.body.qty), name=(req.body.name||'').trim(), phone=(req.body.phone||'').trim();
   if(!Number.isInteger(qty) || qty < 1 || qty > 1000) return res.status(400).json({error:'Quantity must be between 1 and 1000'});
@@ -291,11 +333,17 @@ async function createOrder(req,res){
     const orderToken=crypto.randomBytes(32).toString('base64url');
     const orderTokenHash=crypto.createHash('sha256').update(orderToken).digest('hex');
     const amount=price.toFixed(2);
-    const upiLink='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payee)+'&am='+encodeURIComponent(amount)+'&cu=INR&tn='+encodeURIComponent(orderId);
-    const qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
-    await q('INSERT INTO orders(order_id,qr_code_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7)',[orderId,orderTokenHash,qty,money(price),'created',name,phone]);
-    res.json({orderId,orderToken,qrImage,upiLink,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000});
-  }catch(e){console.error('Manual UPI order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
+    let upiLink='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payee)+'&am='+encodeURIComponent(amount)+'&cu=INR&tn='+encodeURIComponent(orderId);
+    let qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
+    let epay=null;
+    if(String(process.env.EPAY_MERCHANT_KEY||'').trim()){
+      epay=await epayCreateOrder({amount:price,name,phone,orderId});
+      const deep=epay?.deep_links?.upi || epay?.upi_uri || epay?.upi_link || epay?.upi_url || '';
+      if(deep){ upiLink=String(deep); qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'}); }
+    }
+    await q('INSERT INTO orders(order_id,qr_code_id,epay_order_id,epay_status,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[orderId,orderTokenHash,epay?.order_id||null,epay?.status||'created',qty,money(price),'created',name,phone]);
+    res.json({orderId,orderToken,epayOrderId:epay?.order_id||null,qrImage,upiLink,paymentUrl:epay?.payment_url||epay?.checkout_url||null,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000,autoVerify:!!epay});
+  }catch(e){console.error('E Pay order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
 app.post('/api/orders', rateLimit(apiHits,60*1000,20), createOrder);
 
@@ -341,6 +389,11 @@ app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
     const order=ord.rows[0];
     if(!verifyOrderToken(order,String(req.headers['x-order-token']||''))) return res.status(403).json({error:'Invalid order session'});
+    if(order.epay_order_id && String(process.env.EPAY_MERCHANT_KEY||'').trim() && !['approved','paid','rejected'].includes(order.status)){
+      try{ await verifyAndRelease(order.order_id); }catch(e){ console.warn('E Pay QR verification:',e.message); }
+      const fresh=await q('SELECT order_id,qr_code_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
+      if(fresh.rows[0]) Object.assign(order,fresh.rows[0]);
+    }
     const publicOrder={order_id:order.order_id,package_qty:order.package_qty,amount_paise:order.amount_paise,status:order.status,created_at:order.created_at,fulfilled_at:order.fulfilled_at};
     if(order.status==='approved' || order.status==='paid') return res.json({status:'approved',order:publicOrder,items:await getApprovedItems(order.order_id)});
     if(order.status==='payment_received') return res.json({status:'pending_approval',order:publicOrder});
@@ -383,6 +436,11 @@ async function getOrderItems(utr){
 }
 app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
 
+app.post('/api/payment/webhook', async(req,res)=>{
+  try{ const payload=req.body||{}, epayOrderId=String(payload.order_id||payload.epay_order_id||'').trim(); if(!epayOrderId) return res.status(400).json({error:'order_id required'}); const r=await q('SELECT order_id FROM orders WHERE epay_order_id=$1 LIMIT 1',[epayOrderId]); if(!r.rows[0]) return res.status(404).json({error:'Order not found'}); await verifyAndRelease(r.rows[0].order_id); res.json({ok:true}); }
+  catch(e){ console.error('E Pay webhook:',e); res.status(500).json({error:'Webhook processing failed'}); }
+});
+
 app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile(path.join(__dirname,'public','admin.html')); });
 
 (async()=>{
@@ -391,6 +449,6 @@ app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile
     await migrateOrdersSchema();
     await migrateInventoryEncryption();
     await normalizeStorePrice();
-    app.listen(PORT,()=>console.log(`NISHAD BRAND running on ${PORT}`));
+    app.listen(PORT,()=>{ console.log(`NISHAD BRAND running on ${PORT}`); setInterval(autoVerifyPending,10000).unref(); autoVerifyPending(); });
   }catch(e){ console.error('Startup DB error:',e); process.exit(1); }
 })();
