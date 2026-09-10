@@ -291,29 +291,54 @@ async function epayCreateOrder({amount,name,phone,orderId}){
   return d;
 }
 async function epayCheckStatus(epayOrderId){
-  const key=String(process.env.EPAY_MERCHANT_KEY||'').trim(); if(!key || !epayOrderId) return null;
+  const key=String(process.env.EPAY_MERCHANT_KEY||'').trim();
+  if(!key || !epayOrderId) return null;
   const url=EPAY_BASE_URL+'/api/merchant.php?action=status&order_id='+encodeURIComponent(epayOrderId);
-  const r=await fetch(url,{method:'GET',headers:{'X-MERCHANT-KEY':key}});
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(d.error||d.message||('E Pay status HTTP '+r.status));
+  const r=await fetch(url,{method:'GET',headers:{'X-MERCHANT-KEY':key,'Accept':'application/json'}});
+  const text=await r.text();
+  let d={}; try{ d=text ? JSON.parse(text) : {}; }catch{ throw new Error('E Pay returned a non-JSON status response (HTTP '+r.status+')'); }
+  if(!r.ok || d.success===false) throw new Error(d.error||d.message||('E Pay status HTTP '+r.status));
   return d;
 }
+function extractEpayPaymentId(d, fallbackOrderId){
+  return String(d?.utr||d?.rrn||d?.payment_id||d?.transaction_id||d?.txn_id||('EPAY:'+fallbackOrderId)||'').trim();
+}
 async function verifyAndRelease(orderId){
-  const row=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]); if(!row.rows[0]) return {status:'not_found'};
+  const row=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
+  if(!row.rows[0]) return {status:'not_found'};
   const order=row.rows[0];
   if(order.status==='approved'||order.status==='paid') return {status:'approved',items:await getApprovedItems(orderId),order};
   if(!order.epay_order_id || !String(process.env.EPAY_MERCHANT_KEY||'').trim()) return {status:order.status==='payment_received'?'pending_approval':'pending'};
+
   const d=await epayCheckStatus(order.epay_order_id);
-  const gatewayStatus=String(d?.status||'').toUpperCase();
-  const confirmed=d?.is_confirmed===true || gatewayStatus==='TXN_SUCCESS' || gatewayStatus==='SUCCESS' || gatewayStatus==='PAID' || gatewayStatus==='CAPTURED';
-  const gatewayAmount=Number(d?.amount), expectedAmount=Number(order.amount_paise)/100;
-  if(!confirmed){ await q("UPDATE orders SET epay_status=$1 WHERE order_id=$2 AND status NOT IN ('approved','paid')",[gatewayStatus||String(d?.status||'unknown'),orderId]); return {status:(gatewayStatus==='FAILED'||gatewayStatus==='CANCELLED')?'failed':'pending'}; }
-  if(Number.isFinite(gatewayAmount) && Math.abs(gatewayAmount-expectedAmount)>0.01){ console.warn('E Pay amount mismatch',orderId,gatewayAmount,expectedAmount); return {status:'amount_mismatch'}; }
-  const paymentId=String(d?.utr||d?.payment_id||d?.transaction_id||'').trim();
-  await q("UPDATE orders SET epay_status=$1,payment_id=COALESCE(NULLIF($2,''),payment_id),utr=COALESCE(NULLIF($2,''),utr),status=CASE WHEN status='created' THEN 'payment_received' ELSE status END WHERE order_id=$3 AND status NOT IN ('approved','paid','rejected')",[gatewayStatus||'TXN_SUCCESS',paymentId,orderId]);
+  const gatewayStatus=String(d?.status||d?.payment_status||'').trim().toUpperCase();
+  const confirmed=d?.is_confirmed===true || ['TXN_SUCCESS','SUCCESS','PAID','CAPTURED','COMPLETED','CONFIRMED'].includes(gatewayStatus);
+  const expectedAmount=Number(order.amount_paise)/100;
+  const gatewayAmount=Number(d?.amount);
+
+  if(!confirmed){
+    await q("UPDATE orders SET epay_status=$1 WHERE order_id=$2 AND status NOT IN ('approved','paid','rejected')",[gatewayStatus||'UNKNOWN',orderId]);
+    return {status:(gatewayStatus==='FAILED'||gatewayStatus==='CANCELLED'||gatewayStatus==='EXPIRED')?'failed':'pending',gatewayStatus};
+  }
+
+  // If the gateway supplies an amount, it MUST match the order exactly.
+  // Missing amount is tolerated only when E Pay has explicitly marked the order confirmed.
+  if(Number.isFinite(gatewayAmount) && Math.abs(gatewayAmount-expectedAmount)>0.01){
+    await q("UPDATE orders SET epay_status=$1 WHERE order_id=$2",['AMOUNT_MISMATCH',orderId]);
+    console.warn('E Pay amount mismatch',orderId,gatewayAmount,expectedAmount);
+    return {status:'amount_mismatch',gatewayStatus};
+  }
+
+  // A confirmed gateway payment is authoritative. UTR is optional at this point;
+  // some E Pay responses expose a transaction/payment ID instead of UTR.
+  const paymentId=extractEpayPaymentId(d,order.epay_order_id);
+  await q("UPDATE orders SET epay_status=$1,payment_id=COALESCE(NULLIF($2,''),payment_id),utr=COALESCE(NULLIF($3,''),NULLIF($2,''),utr),status='payment_received' WHERE order_id=$4 AND status NOT IN ('approved','paid','rejected')",[gatewayStatus||'TXN_SUCCESS',paymentId,String(d?.utr||'').trim(),orderId]);
+
+  // fulfillManual requires a non-empty transaction reference. Use the verified
+  // gateway payment reference when the response does not include a UTR.
   await fulfillManual(orderId);
   const items=await getApprovedItems(orderId), fresh=(await q('SELECT * FROM orders WHERE order_id=$1',[orderId])).rows[0];
-  return {status:'approved',items,order:fresh};
+  return {status:'approved',items,order:fresh,gatewayStatus};
 }
 async function autoVerifyPending(){
   if(!String(process.env.EPAY_MERCHANT_KEY||'').trim()) return;
@@ -350,7 +375,13 @@ async function createOrder(req,res){
     if(String(process.env.EPAY_MERCHANT_KEY||'').trim()){
       epay=await epayCreateOrder({amount:price,name,phone,orderId});
       const deep=epay?.deep_links?.upi || epay?.upi_uri || epay?.upi_link || epay?.upi_url || '';
-      if(deep){ upiLink=String(deep); qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'}); }
+      const checkout=epay?.payment_url || epay?.checkout_url || epay?.checkout || '';
+      // The QR must point to E Pay's order-specific payment flow. A static VPA QR
+      // cannot be tied to this order and therefore cannot be auto-verified reliably.
+      const paymentTarget=deep || checkout;
+      if(!paymentTarget) throw new Error('E Pay did not return an order-specific UPI/checkout URL. Automatic verification cannot be enabled for this order.');
+      upiLink=String(paymentTarget);
+      qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
     }
     await q('INSERT INTO orders(order_id,qr_code_id,epay_order_id,epay_status,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[orderId,orderTokenHash,epay?.order_id||null,epay?.status||'created',qty,money(price),'created',name,phone]);
     res.json({orderId,orderToken,epayOrderId:epay?.order_id||null,qrImage,upiLink,paymentUrl:epay?.payment_url||epay?.checkout_url||null,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000,autoVerify:!!epay});
@@ -417,10 +448,11 @@ app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(
     }
     const publicOrder={order_id:order.order_id,package_qty:order.package_qty,amount_paise:order.amount_paise,status:order.status,created_at:order.created_at,fulfilled_at:order.fulfilled_at};
     if(order.status==='approved' || order.status==='paid') return res.json({status:'approved',order:publicOrder,items:await getApprovedItems(order.order_id)});
-    if(order.status==='payment_received') return res.json({status:'pending_approval',order:publicOrder});
+    if(order.status==='payment_received') return res.json({status:'pending_approval',order:publicOrder,epayStatus:order.epay_status||null});
     if(order.status==='rejected') return res.json({status:'rejected',order:publicOrder});
+    if(String(order.epay_status||'').toUpperCase()==='AMOUNT_MISMATCH') return res.json({status:'amount_mismatch',order:publicOrder,epayStatus:order.epay_status});
     const expiresAt=new Date(order.created_at).getTime()+300000;
-    res.json({status:Date.now()>expiresAt?'expired':'pending',expiresAt,order:publicOrder});
+    res.json({status:Date.now()>expiresAt?'expired':'pending',expiresAt,order:publicOrder,epayStatus:order.epay_status||null});
   }catch(e){console.error('Manual QR status error:',e);res.status(500).json({error:e.message||'Could not check order'});}
 });
 

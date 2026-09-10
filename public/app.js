@@ -52,8 +52,9 @@ async function checkQrStatus(orderId){
     const r=await fetch('/api/payment/qr-status/'+encodeURIComponent(orderId),{cache:'no-store',headers:{'X-Order-Token':String(window.currentOrderToken||'')}}); const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Verification failed');
     if(d.status==='approved' || d.status==='paid'){stopPolling();showIDs(d.items,d.order);return;}
-    if(d.status==='pending'){ $('payStatus').innerHTML='<div class="pending"><b>Payment waiting…</b><br>E Pay se payment status automatically check ho raha hai.<br><small>Successful payment ke baad ID automatically release hogi.</small></div>'; return; }
-    if(d.status==='failed'){stopPolling();$('payStatus').innerHTML='<div class="error">Payment failed/cancelled. Please start a new order.</div>';return;}
+    if(d.status==='pending'){ const st=d.epayStatus&&String(d.epayStatus).toUpperCase(); $('payStatus').innerHTML='<div class="pending"><b>Payment waiting…</b><br>E Pay se payment status automatically check ho raha hai.<br>'+(st?'<small>Gateway status: '+esc(st)+'</small><br>':'')+'<small>Successful payment ke baad ID automatically release hogi.</small></div>'; return; }
+    if(d.status==='failed'){stopPolling();$('payStatus').innerHTML='<div class="error">E Pay status: '+esc(d.epayStatus||'FAILED')+'. Please start a new order.</div>';return;}
+    if(d.status==='amount_mismatch'){stopPolling();$('payStatus').innerHTML='<div class="error">Payment amount did not match this order. ID was not released.</div>';return;}
     if(d.status==='expired'){stopPolling();$('payStatus').innerHTML='<div class="error">QR expired. Please click Buy Now again to generate a new QR.</div>';return;}
   }catch(e){console.warn(e);}
 }

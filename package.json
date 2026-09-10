@@ -1,8 +1,8 @@
 {
   "name": "nishad-brand-id-store",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
-  "description": "NISHAD BRAND ID Store with E Pay Dynamic QR, automatic payment verification and automatic stock delivery",
+  "description": "NISHAD BRAND ID Store with E Pay order-specific QR, automatic server-side payment verification and automatic stock delivery",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
