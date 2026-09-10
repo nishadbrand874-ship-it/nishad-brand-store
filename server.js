@@ -140,13 +140,24 @@ function money(n){ return Math.round(Number(n)*100); }
 function signToken(){ return jwt.sign({role:'admin',jti:crypto.randomBytes(16).toString('hex')}, process.env.JWT_SECRET, {expiresIn:'2h'}); }
 async function q(text, params=[]){ return pool.query(text, params); }
 async function migrateOrdersSchema(){
-  // Backward-compatible migration for existing databases created before qr_code_id was added.
+  // Backward-compatible migration for existing Render/Postgres databases.
   // CREATE TABLE IF NOT EXISTS does not modify an already-existing orders table.
+  // V48 adds every E Pay column used by the automatic verification code.
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS qr_code_id TEXT');
+  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS epay_order_id TEXT');
+  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS epay_status TEXT');
+  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT');
+  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS utr TEXT');
+  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMPTZ');
   try {
     await q('CREATE UNIQUE INDEX IF NOT EXISTS orders_qr_code_id_unique ON orders(qr_code_id) WHERE qr_code_id IS NOT NULL');
   } catch (e) {
     console.warn('QR code index migration skipped:', e.message);
+  }
+  try {
+    await q('CREATE UNIQUE INDEX IF NOT EXISTS orders_utr_unique ON orders(LOWER(utr)) WHERE utr IS NOT NULL');
+  } catch (e) {
+    console.warn('UTR index migration skipped:', e.message);
   }
 }
 
@@ -375,7 +386,17 @@ app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,re
       if(latest.rows[0]?.status==='payment_received') return res.json({ok:true,status:'pending_approval',order:latest.rows[0]});
       return res.status(400).json({error:'Order cannot accept UTR in its current state'});
     }
-    res.json({ok:true,status:'pending_approval',order:r.rows[0],message:'UTR recorded. Admin must verify the payment and approve it before IDs are released.'});
+    // Immediately ask E Pay for the authoritative payment status.
+    // A submitted UTR alone never releases stock; only a confirmed E Pay payment does.
+    try {
+      const verified = await verifyAndRelease(orderId);
+      if (verified.status === 'approved') {
+        return res.json({ok:true,status:'approved',order:verified.order,items:verified.items,message:'Payment automatically verified and ID released.'});
+      }
+    } catch (e) {
+      console.warn('Immediate E Pay verification after UTR:', e.message);
+    }
+    res.json({ok:true,status:'pending_approval',order:r.rows[0],message:'UTR recorded. E Pay automatic verification is running; ID will be released after confirmed payment.'});
   }catch(e){
     console.error('UTR submit error:',e);
     if(e && e.code==='23505' && String(e.constraint||'').includes('orders_utr_unique')) return res.status(409).json({error:'This UTR has already been submitted and cannot be reused.'});
@@ -385,13 +406,13 @@ app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,re
 
 app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(req,res)=>{
   try{
-    const ord=await q('SELECT order_id,qr_code_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
+    const ord=await q('SELECT order_id,qr_code_id,epay_order_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
     const order=ord.rows[0];
     if(!verifyOrderToken(order,String(req.headers['x-order-token']||''))) return res.status(403).json({error:'Invalid order session'});
     if(order.epay_order_id && String(process.env.EPAY_MERCHANT_KEY||'').trim() && !['approved','paid','rejected'].includes(order.status)){
       try{ await verifyAndRelease(order.order_id); }catch(e){ console.warn('E Pay QR verification:',e.message); }
-      const fresh=await q('SELECT order_id,qr_code_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
+      const fresh=await q('SELECT order_id,qr_code_id,epay_order_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
       if(fresh.rows[0]) Object.assign(order,fresh.rows[0]);
     }
     const publicOrder={order_id:order.order_id,package_qty:order.package_qty,amount_paise:order.amount_paise,status:order.status,created_at:order.created_at,fulfilled_at:order.fulfilled_at};

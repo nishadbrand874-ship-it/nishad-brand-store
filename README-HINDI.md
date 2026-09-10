@@ -1,3 +1,9 @@
+## V48 AUTO VERIFY FIX
+- Existing databases are migrated automatically with missing E Pay order columns.
+- Customer QR status polling now includes the E Pay order ID.
+- UTR submission immediately triggers server-side E Pay verification.
+- Stock is released only after confirmed E Pay status and exact amount match.
+
 # NISHAD BRAND — ID Store
 
 यह project customer storefront + admin panel + PostgreSQL + UPI server-side verification के लिए है।
