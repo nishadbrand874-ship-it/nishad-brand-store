@@ -140,25 +140,13 @@ function money(n){ return Math.round(Number(n)*100); }
 function signToken(){ return jwt.sign({role:'admin',jti:crypto.randomBytes(16).toString('hex')}, process.env.JWT_SECRET, {expiresIn:'2h'}); }
 async function q(text, params=[]){ return pool.query(text, params); }
 async function migrateOrdersSchema(){
-  // Backward-compatible migration for existing Render/Postgres databases.
+  // Backward-compatible migration for existing databases created before qr_code_id was added.
   // CREATE TABLE IF NOT EXISTS does not modify an already-existing orders table.
-  // V48 adds every E Pay column used by the automatic verification code.
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS qr_code_id TEXT');
-  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS epay_order_id TEXT');
-  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS epay_status TEXT');
-  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS epay_status_url TEXT');
-  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT');
-  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS utr TEXT');
-  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMPTZ');
   try {
     await q('CREATE UNIQUE INDEX IF NOT EXISTS orders_qr_code_id_unique ON orders(qr_code_id) WHERE qr_code_id IS NOT NULL');
   } catch (e) {
     console.warn('QR code index migration skipped:', e.message);
-  }
-  try {
-    await q('CREATE UNIQUE INDEX IF NOT EXISTS orders_utr_unique ON orders(LOWER(utr)) WHERE utr IS NOT NULL');
-  } catch (e) {
-    console.warn('UTR index migration skipped:', e.message);
   }
 }
 
@@ -220,7 +208,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
   const s=await settings();
   const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   const sold=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='sold'");
-  const orders=await q("SELECT order_id,epay_order_id,epay_status,epay_status_url,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
+  const orders=await q("SELECT order_id,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
   const inv=await q("SELECT id,status,sold_order_id,created_at FROM inventory ORDER BY id DESC LIMIT 500");
   const today=await q(`SELECT
     (SELECT COUNT(*)::int FROM inventory WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status='sold') AS today_sold_ids,
@@ -279,82 +267,6 @@ app.post('/api/admin/inventory',auth,async(req,res)=>{
 });
 app.delete('/api/admin/inventory/:id',auth,async(req,res)=>{ await q("DELETE FROM inventory WHERE id=$1 AND status='available'",[req.params.id]); res.json({ok:true}); });
 
-// E Pay automatic verification: gateway credentials stay server-side.
-const EPAY_BASE_URL = String(process.env.EPAY_BASE_URL || 'https://epay.xevro.fun').replace(/\/$/, '');
-function epayHeaders(){ return {'Content-Type':'application/json','X-MERCHANT-KEY':String(process.env.EPAY_MERCHANT_KEY||'')}; }
-async function epayCreateOrder({amount,name,phone,orderId}){
-  const key=String(process.env.EPAY_MERCHANT_KEY||'').trim(); if(!key) return null;
-  const base=String(process.env.PUBLIC_BASE_URL||'').replace(/\/$/,'');
-  const payload={action:'create_order',amount:Number(amount),customer_name:name||'NISHAD BRAND Customer',customer_email:'',customer_mobile:phone||'',return_url:base+'/payment-success?order_id='+encodeURIComponent(orderId),webhook_url:base+'/api/payment/webhook'};
-  const r=await fetch(EPAY_BASE_URL+'/api/merchant.php',{method:'POST',headers:epayHeaders(),body:JSON.stringify(payload)});
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok || d.success===false || !d.order_id) throw new Error(d.error||d.message||'E Pay order creation failed');
-  return d;
-}
-async function epayCheckStatus(epayOrderId,statusUrl){
-  const key=String(process.env.EPAY_MERCHANT_KEY||'').trim();
-  if(!key || !epayOrderId) return null;
-  const urls=[];
-  if(statusUrl) urls.push(String(statusUrl));
-  urls.push(EPAY_BASE_URL+'/api/merchant.php?action=status&order_id='+encodeURIComponent(epayOrderId));
-  let lastError=null;
-  for(const url of urls){
-    try{
-      const r=await fetch(url,{method:'GET',headers:{'X-MERCHANT-KEY':key,'Accept':'application/json'}});
-      const text=await r.text();
-      let d={}; try{ d=text ? JSON.parse(text) : {}; }catch{ throw new Error('E Pay returned a non-JSON status response (HTTP '+r.status+')'); }
-      if(!r.ok || d.success===false) throw new Error(d.error||d.message||('E Pay status HTTP '+r.status));
-      return d;
-    }catch(e){ lastError=e; }
-  }
-  throw lastError || new Error('E Pay status check failed');
-}
-function extractEpayPaymentId(d, fallbackOrderId){
-  return String(d?.utr||d?.rrn||d?.payment_id||d?.transaction_id||d?.txn_id||('EPAY:'+fallbackOrderId)||'').trim();
-}
-async function verifyAndRelease(orderId){
-  const row=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
-  if(!row.rows[0]) return {status:'not_found'};
-  const order=row.rows[0];
-  if(order.status==='approved'||order.status==='paid') return {status:'approved',items:await getApprovedItems(orderId),order};
-  if(!order.epay_order_id || !String(process.env.EPAY_MERCHANT_KEY||'').trim()) return {status:order.status==='payment_received'?'pending_approval':'pending'};
-
-  const d=await epayCheckStatus(order.epay_order_id, order.epay_status_url);
-  const gatewayStatus=String(d?.status||d?.payment_status||'').trim().toUpperCase();
-  const confirmed=d?.is_confirmed===true || ['TXN_SUCCESS','SUCCESS','PAID','CAPTURED','COMPLETED','CONFIRMED'].includes(gatewayStatus);
-  const expectedAmount=Number(order.amount_paise)/100;
-  const gatewayAmountRaw = d?.amount != null && d?.amount !== '' ? Number(d.amount) : (d?.amount_paise != null && d?.amount_paise !== '' ? Number(d.amount_paise)/100 : NaN);
-  const gatewayAmount = Number.isFinite(gatewayAmountRaw) ? gatewayAmountRaw : NaN;
-
-  if(!confirmed){
-    await q("UPDATE orders SET epay_status=$1 WHERE order_id=$2 AND status NOT IN ('approved','paid','rejected')",[gatewayStatus||'UNKNOWN',orderId]);
-    return {status:(gatewayStatus==='FAILED'||gatewayStatus==='CANCELLED'||gatewayStatus==='EXPIRED')?'failed':'pending',gatewayStatus};
-  }
-
-  // If the gateway supplies an amount, it MUST match the order exactly.
-  // Missing amount is tolerated only when E Pay has explicitly marked the order confirmed.
-  if(Number.isFinite(gatewayAmount) && Math.abs(gatewayAmount-expectedAmount)>0.01){
-    await q("UPDATE orders SET epay_status=$1 WHERE order_id=$2",['AMOUNT_MISMATCH',orderId]);
-    console.warn('E Pay amount mismatch',orderId,gatewayAmount,expectedAmount);
-    return {status:'amount_mismatch',gatewayStatus};
-  }
-
-  // A confirmed gateway payment is authoritative. UTR is optional at this point;
-  // some E Pay responses expose a transaction/payment ID instead of UTR.
-  const paymentId=extractEpayPaymentId(d,order.epay_order_id);
-  await q("UPDATE orders SET epay_status=$1,payment_id=COALESCE(NULLIF($2,''),payment_id),utr=COALESCE(NULLIF($3,''),NULLIF($2,''),utr),status='payment_received' WHERE order_id=$4 AND status NOT IN ('approved','paid','rejected')",[gatewayStatus||'TXN_SUCCESS',paymentId,String(d?.utr||'').trim(),orderId]);
-
-  // fulfillManual requires a non-empty transaction reference. Use the verified
-  // gateway payment reference when the response does not include a UTR.
-  await fulfillManual(orderId);
-  const items=await getApprovedItems(orderId), fresh=(await q('SELECT * FROM orders WHERE order_id=$1',[orderId])).rows[0];
-  return {status:'approved',items,order:fresh,gatewayStatus};
-}
-async function autoVerifyPending(){
-  if(!String(process.env.EPAY_MERCHANT_KEY||'').trim()) return;
-  try{ const r=await q("SELECT order_id FROM orders WHERE status IN ('created','payment_received') AND epay_order_id IS NOT NULL AND created_at > NOW()-INTERVAL '10 minutes' ORDER BY created_at ASC LIMIT 20"); for(const row of r.rows){ try{await verifyAndRelease(row.order_id);}catch(e){console.warn('E Pay auto-verify:',row.order_id,e.message);} } }catch(e){console.warn('Auto verify query:',e.message);}
-}
-
 async function createOrder(req,res){
   const qty=Number(req.body.qty), name=(req.body.name||'').trim(), phone=(req.body.phone||'').trim();
   if(!Number.isInteger(qty) || qty < 1 || qty > 1000) return res.status(400).json({error:'Quantity must be between 1 and 1000'});
@@ -379,23 +291,11 @@ async function createOrder(req,res){
     const orderToken=crypto.randomBytes(32).toString('base64url');
     const orderTokenHash=crypto.createHash('sha256').update(orderToken).digest('hex');
     const amount=price.toFixed(2);
-    let upiLink='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payee)+'&am='+encodeURIComponent(amount)+'&cu=INR&tn='+encodeURIComponent(orderId);
-    let qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
-    let epay=null;
-    if(String(process.env.EPAY_MERCHANT_KEY||'').trim()){
-      epay=await epayCreateOrder({amount:price,name,phone,orderId});
-      const deep=epay?.deep_links?.upi || epay?.upi_uri || epay?.upi_link || epay?.upi_url || '';
-      // Prefer E Pay's order-specific UPI intent so the QR shown on NISHAD BRAND
-      // is scanned directly by GPay/PhonePe/Paytm instead of opening E Pay's
-      // separate checkout website. The intent belongs to the E Pay-created OID.
-      const paymentTarget=deep;
-      if(!paymentTarget) throw new Error('E Pay did not return an order-specific UPI intent. Direct QR payment cannot be enabled safely for this order.');
-      upiLink=String(paymentTarget);
-      qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
-    }
-    await q('INSERT INTO orders(order_id,qr_code_id,epay_order_id,epay_status,epay_status_url,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[orderId,orderTokenHash,epay?.order_id||null,epay?.status||'created',epay?.status_url||null,qty,money(price),'created',name,phone]);
-    res.json({orderId,orderToken,epayOrderId:epay?.order_id||null,qrImage,upiLink,paymentUrl:epay?.payment_url||epay?.checkout_url||null,statusUrl:epay?.status_url||null,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000,autoVerify:!!epay});
-  }catch(e){console.error('E Pay order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
+    const upiLink='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payee)+'&am='+encodeURIComponent(amount)+'&cu=INR&tn='+encodeURIComponent(orderId);
+    const qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
+    await q('INSERT INTO orders(order_id,qr_code_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7)',[orderId,orderTokenHash,qty,money(price),'created',name,phone]);
+    res.json({orderId,orderToken,qrImage,upiLink,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000});
+  }catch(e){console.error('Manual UPI order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
 app.post('/api/orders', rateLimit(apiHits,60*1000,20), createOrder);
 
@@ -427,17 +327,7 @@ app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,re
       if(latest.rows[0]?.status==='payment_received') return res.json({ok:true,status:'pending_approval',order:latest.rows[0]});
       return res.status(400).json({error:'Order cannot accept UTR in its current state'});
     }
-    // Immediately ask E Pay for the authoritative payment status.
-    // A submitted UTR alone never releases stock; only a confirmed E Pay payment does.
-    try {
-      const verified = await verifyAndRelease(orderId);
-      if (verified.status === 'approved') {
-        return res.json({ok:true,status:'approved',order:verified.order,items:verified.items,message:'Payment automatically verified and ID released.'});
-      }
-    } catch (e) {
-      console.warn('Immediate E Pay verification after UTR:', e.message);
-    }
-    res.json({ok:true,status:'pending_approval',order:r.rows[0],message:'UTR recorded. E Pay automatic verification is running; ID will be released after confirmed payment.'});
+    res.json({ok:true,status:'pending_approval',order:r.rows[0],message:'UTR recorded. Admin must verify the payment and approve it before IDs are released.'});
   }catch(e){
     console.error('UTR submit error:',e);
     if(e && e.code==='23505' && String(e.constraint||'').includes('orders_utr_unique')) return res.status(409).json({error:'This UTR has already been submitted and cannot be reused.'});
@@ -447,22 +337,16 @@ app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,re
 
 app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(req,res)=>{
   try{
-    const ord=await q('SELECT order_id,qr_code_id,epay_order_id,epay_status_url,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
+    const ord=await q('SELECT order_id,qr_code_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
     const order=ord.rows[0];
     if(!verifyOrderToken(order,String(req.headers['x-order-token']||''))) return res.status(403).json({error:'Invalid order session'});
-    if(order.epay_order_id && String(process.env.EPAY_MERCHANT_KEY||'').trim() && !['approved','paid','rejected'].includes(order.status)){
-      try{ await verifyAndRelease(order.order_id); }catch(e){ console.warn('E Pay QR verification:',e.message); }
-      const fresh=await q('SELECT order_id,qr_code_id,epay_order_id,epay_status_url,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
-      if(fresh.rows[0]) Object.assign(order,fresh.rows[0]);
-    }
     const publicOrder={order_id:order.order_id,package_qty:order.package_qty,amount_paise:order.amount_paise,status:order.status,created_at:order.created_at,fulfilled_at:order.fulfilled_at};
     if(order.status==='approved' || order.status==='paid') return res.json({status:'approved',order:publicOrder,items:await getApprovedItems(order.order_id)});
-    if(order.status==='payment_received') return res.json({status:'pending_approval',order:publicOrder,epayStatus:order.epay_status||null});
+    if(order.status==='payment_received') return res.json({status:'pending_approval',order:publicOrder});
     if(order.status==='rejected') return res.json({status:'rejected',order:publicOrder});
-    if(String(order.epay_status||'').toUpperCase()==='AMOUNT_MISMATCH') return res.json({status:'amount_mismatch',order:publicOrder,epayStatus:order.epay_status});
     const expiresAt=new Date(order.created_at).getTime()+300000;
-    res.json({status:Date.now()>expiresAt?'expired':'pending',expiresAt,order:publicOrder,epayStatus:order.epay_status||null});
+    res.json({status:Date.now()>expiresAt?'expired':'pending',expiresAt,order:publicOrder});
   }catch(e){console.error('Manual QR status error:',e);res.status(500).json({error:e.message||'Could not check order'});}
 });
 
@@ -499,34 +383,6 @@ async function getOrderItems(utr){
 }
 app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
 
-app.post('/api/payment/webhook', async(req,res)=>{
-  try{ const payload=req.body||{}, epayOrderId=String(payload.order_id||payload.epay_order_id||'').trim(); if(!epayOrderId) return res.status(400).json({error:'order_id required'}); const r=await q('SELECT order_id FROM orders WHERE epay_order_id=$1 LIMIT 1',[epayOrderId]); if(!r.rows[0]) return res.status(404).json({error:'Order not found'}); await verifyAndRelease(r.rows[0].order_id); res.json({ok:true}); }
-  catch(e){ console.error('E Pay webhook:',e); res.status(500).json({error:'Webhook processing failed'}); }
-});
-
-app.get('/payment-success', async(req,res)=>{
-  try{
-    const suppliedId=String(req.query.order_id||'').trim();
-    let localOrderId=suppliedId;
-    // E Pay may return its own OID, while our return_url also contains the local NB order.
-    // Accept either identifier, then always perform server-side E Pay verification.
-    if(suppliedId){
-      const byLocal=await q('SELECT order_id FROM orders WHERE order_id=$1 LIMIT 1',[suppliedId]);
-      if(!byLocal.rows[0]){
-        const byEpay=await q('SELECT order_id FROM orders WHERE epay_order_id=$1 LIMIT 1',[suppliedId]);
-        if(byEpay.rows[0]) localOrderId=byEpay.rows[0].order_id;
-      }
-    }
-    const returnedUtr=String(req.query.utr||req.query.transaction_id||req.query.txn_id||'').trim().replace(/\s+/g,'');
-    if(localOrderId && returnedUtr && /^[A-Za-z0-9]{8,35}$/.test(returnedUtr)){
-      await q("UPDATE orders SET utr=COALESCE(NULLIF($1,''),utr),payment_id=COALESCE(NULLIF($1,''),payment_id) WHERE order_id=$2 AND status NOT IN ('approved','paid','rejected')",[returnedUtr,localOrderId]);
-    }
-    if(localOrderId && String(process.env.EPAY_MERCHANT_KEY||'').trim()) await verifyAndRelease(localOrderId);
-  }catch(e){ console.warn('E Pay return verification:',e.message); }
-  res.set('Cache-Control','no-store');
-  res.redirect('/?payment_return=1');
-});
-
 app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile(path.join(__dirname,'public','admin.html')); });
 
 (async()=>{
@@ -535,6 +391,6 @@ app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile
     await migrateOrdersSchema();
     await migrateInventoryEncryption();
     await normalizeStorePrice();
-    app.listen(PORT,()=>{ console.log(`NISHAD BRAND running on ${PORT}`); setInterval(autoVerifyPending,10000).unref(); autoVerifyPending(); });
+    app.listen(PORT,()=>console.log(`NISHAD BRAND running on ${PORT}`));
   }catch(e){ console.error('Startup DB error:',e); process.exit(1); }
 })();

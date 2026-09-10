@@ -1,9 +1,3 @@
-## V48 AUTO VERIFY FIX
-- Existing databases are migrated automatically with missing E Pay order columns.
-- Customer QR status polling now includes the E Pay order ID.
-- UTR submission immediately triggers server-side E Pay verification.
-- Stock is released only after confirmed E Pay status and exact amount match.
-
 # NISHAD BRAND — ID Store
 
 यह project customer storefront + admin panel + PostgreSQL + UPI server-side verification के लिए है।
@@ -146,14 +140,3 @@ Admin Panel → Store Settings → Price per ID अब public website, Custom Qu
 - Admin asset uploads are restricted to PNG/JPEG/WebP and 1 MB per file.
 - Production responses include HSTS.
 - UPI QR generation uses the configured Store Settings UPI VPA.
-
-
-## E Pay Dynamic QR + Auto Verification
-Render Environment Variables में `EPAY_MERCHANT_KEY` और `PUBLIC_BASE_URL` सेट करें। Customer payment के बाद server E Pay status API से confirmation check करता है; confirmed और exact amount match होने पर stock automatically fulfill होता है। API secret browser में नहीं जाता।
-
-
-## V49 AUTO VERIFY FIX
-- When E Pay is configured, the customer QR now points to the E Pay order-specific UPI/deep-link or checkout URL; the site no longer silently falls back to a static merchant QR for auto verification.
-- Confirmed E Pay payments can auto-release inventory even when the gateway response does not contain a UTR, using the verified gateway payment reference internally.
-- Gateway status and amount mismatch are handled explicitly.
-- A static VPA QR alone is not treated as auto-verifiable.

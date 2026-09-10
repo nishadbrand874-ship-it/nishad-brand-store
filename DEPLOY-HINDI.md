@@ -23,10 +23,3 @@ After Render gives the service URL, set the webhook URL to:
 2. Real payment के लिए `rzp_live_...` LIVE keys इस्तेमाल करें; Test Mode keys से live money collect नहीं होगी.
 3. Admin → Store Settings में `UPI ID / VPA` केवल fallback के लिए है.
 4. UPI webhook में payment events enable रखें ताकि captured QR payments जल्दी `payment_received` बनें. Server polling भी backup verification करता है.
-
-
-## V49 AUTO VERIFY FIX
-- When E Pay is configured, the customer QR now points to the E Pay order-specific UPI/deep-link or checkout URL; the site no longer silently falls back to a static merchant QR for auto verification.
-- Confirmed E Pay payments can auto-release inventory even when the gateway response does not contain a UTR, using the verified gateway payment reference internally.
-- Gateway status and amount mismatch are handled explicitly.
-- A static VPA QR alone is not treated as auto-verifiable.
