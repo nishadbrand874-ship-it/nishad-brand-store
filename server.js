@@ -385,13 +385,11 @@ async function createOrder(req,res){
     if(String(process.env.EPAY_MERCHANT_KEY||'').trim()){
       epay=await epayCreateOrder({amount:price,name,phone,orderId});
       const deep=epay?.deep_links?.upi || epay?.upi_uri || epay?.upi_link || epay?.upi_url || '';
-      const checkout=epay?.payment_url || epay?.checkout_url || epay?.checkout || '';
-      // IMPORTANT: use E Pay's order-specific checkout URL for the QR.
-      // A raw UPI deep-link can bypass E Pay's UTR/return/webhook flow, which
-      // would make reliable automatic verification impossible.
-      // Keep the direct UPI intent only as a secondary field for future use.
-      const paymentTarget=checkout || deep;
-      if(!paymentTarget) throw new Error('E Pay did not return an order-specific checkout URL. Automatic verification cannot be enabled for this order.');
+      // Prefer E Pay's order-specific UPI intent so the QR shown on NISHAD BRAND
+      // is scanned directly by GPay/PhonePe/Paytm instead of opening E Pay's
+      // separate checkout website. The intent belongs to the E Pay-created OID.
+      const paymentTarget=deep;
+      if(!paymentTarget) throw new Error('E Pay did not return an order-specific UPI intent. Direct QR payment cannot be enabled safely for this order.');
       upiLink=String(paymentTarget);
       qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
     }
