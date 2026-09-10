@@ -377,10 +377,12 @@ async function createOrder(req,res){
       epay=await epayCreateOrder({amount:price,name,phone,orderId});
       const deep=epay?.deep_links?.upi || epay?.upi_uri || epay?.upi_link || epay?.upi_url || '';
       const checkout=epay?.payment_url || epay?.checkout_url || epay?.checkout || '';
-      // The QR must point to E Pay's order-specific payment flow. A static VPA QR
-      // cannot be tied to this order and therefore cannot be auto-verified reliably.
-      const paymentTarget=deep || checkout;
-      if(!paymentTarget) throw new Error('E Pay did not return an order-specific UPI/checkout URL. Automatic verification cannot be enabled for this order.');
+      // IMPORTANT: use E Pay's order-specific checkout URL for the QR.
+      // A raw UPI deep-link can bypass E Pay's UTR/return/webhook flow, which
+      // would make reliable automatic verification impossible.
+      // Keep the direct UPI intent only as a secondary field for future use.
+      const paymentTarget=checkout || deep;
+      if(!paymentTarget) throw new Error('E Pay did not return an order-specific checkout URL. Automatic verification cannot be enabled for this order.');
       upiLink=String(paymentTarget);
       qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
     }
@@ -497,8 +499,18 @@ app.post('/api/payment/webhook', async(req,res)=>{
 
 app.get('/payment-success', async(req,res)=>{
   try{
-    const orderId=String(req.query.order_id||'').trim();
-    if(orderId && String(process.env.EPAY_MERCHANT_KEY||'').trim()) await verifyAndRelease(orderId);
+    const suppliedId=String(req.query.order_id||'').trim();
+    let localOrderId=suppliedId;
+    // E Pay may return its own OID, while our return_url also contains the local NB order.
+    // Accept either identifier, then always perform server-side E Pay verification.
+    if(suppliedId){
+      const byLocal=await q('SELECT order_id FROM orders WHERE order_id=$1 LIMIT 1',[suppliedId]);
+      if(!byLocal.rows[0]){
+        const byEpay=await q('SELECT order_id FROM orders WHERE epay_order_id=$1 LIMIT 1',[suppliedId]);
+        if(byEpay.rows[0]) localOrderId=byEpay.rows[0].order_id;
+      }
+    }
+    if(localOrderId && String(process.env.EPAY_MERCHANT_KEY||'').trim()) await verifyAndRelease(localOrderId);
   }catch(e){ console.warn('E Pay return verification:',e.message); }
   res.set('Cache-Control','no-store');
   res.redirect('/?payment_return=1');
