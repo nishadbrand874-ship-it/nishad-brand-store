@@ -29,7 +29,7 @@ async function startQrPayment(){
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'QR create failed');
     $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').href=d.paymentUrl||d.upiLink||'#'; $('upiOpen').classList.toggle('hidden',!d.paymentUrl&&!d.upiLink); $('payText').textContent=d.quantity+' ID — ₹'+money(Number(d.amount!=null?d.amount/100:selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.amount||0)/100)+'</b><br>Payment karein. E Pay payment ko server-side automatically verify karega. Successful verification ke baad ID automatically release hogi.'; $('utrBox').classList.add('hidden');
     startCountdown(Number(d.expiresAt||Date.now()+300000));
-    window.currentOrderId=d.orderId; window.currentOrderToken=d.orderToken||''; pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000); await checkQrStatus(d.orderId);
+    window.currentOrderId=d.orderId; window.currentOrderToken=d.orderToken||''; await checkQrStatus(d.orderId); setTimeout(()=>checkQrStatus(d.orderId),1000); pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000);
   }catch(e){$('payStatus').innerHTML='<div class="error">'+esc(e.message)+'</div>';}
 }
 async function submitUTR(){

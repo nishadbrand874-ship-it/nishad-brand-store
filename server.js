@@ -219,7 +219,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
   const s=await settings();
   const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   const sold=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='sold'");
-  const orders=await q("SELECT order_id,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
+  const orders=await q("SELECT order_id,epay_order_id,epay_status,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
   const inv=await q("SELECT id,status,sold_order_id,created_at FROM inventory ORDER BY id DESC LIMIT 500");
   const today=await q(`SELECT
     (SELECT COUNT(*)::int FROM inventory WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status='sold') AS today_sold_ids,
@@ -284,7 +284,7 @@ function epayHeaders(){ return {'Content-Type':'application/json','X-MERCHANT-KE
 async function epayCreateOrder({amount,name,phone,orderId}){
   const key=String(process.env.EPAY_MERCHANT_KEY||'').trim(); if(!key) return null;
   const base=String(process.env.PUBLIC_BASE_URL||'').replace(/\/$/,'');
-  const payload={action:'create_order',amount:Number(amount),customer_name:name||'NISHAD BRAND Customer',customer_mobile:phone||'',return_url:base+'/payment-success?order_id='+encodeURIComponent(orderId),webhook_url:base+'/api/payment/webhook'};
+  const payload={action:'create_order',amount:Number(amount),customer_name:name||'NISHAD BRAND Customer',customer_email:'',customer_mobile:phone||'',return_url:base+'/payment-success?order_id='+encodeURIComponent(orderId),webhook_url:base+'/api/payment/webhook'};
   const r=await fetch(EPAY_BASE_URL+'/api/merchant.php',{method:'POST',headers:epayHeaders(),body:JSON.stringify(payload)});
   const d=await r.json().catch(()=>({}));
   if(!r.ok || d.success===false || !d.order_id) throw new Error(d.error||d.message||'E Pay order creation failed');
@@ -314,7 +314,8 @@ async function verifyAndRelease(orderId){
   const gatewayStatus=String(d?.status||d?.payment_status||'').trim().toUpperCase();
   const confirmed=d?.is_confirmed===true || ['TXN_SUCCESS','SUCCESS','PAID','CAPTURED','COMPLETED','CONFIRMED'].includes(gatewayStatus);
   const expectedAmount=Number(order.amount_paise)/100;
-  const gatewayAmount=Number(d?.amount);
+  const gatewayAmountRaw = d?.amount != null && d?.amount !== '' ? Number(d.amount) : (d?.amount_paise != null && d?.amount_paise !== '' ? Number(d.amount_paise)/100 : NaN);
+  const gatewayAmount = Number.isFinite(gatewayAmountRaw) ? gatewayAmountRaw : NaN;
 
   if(!confirmed){
     await q("UPDATE orders SET epay_status=$1 WHERE order_id=$2 AND status NOT IN ('approved','paid','rejected')",[gatewayStatus||'UNKNOWN',orderId]);
@@ -492,6 +493,15 @@ app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>
 app.post('/api/payment/webhook', async(req,res)=>{
   try{ const payload=req.body||{}, epayOrderId=String(payload.order_id||payload.epay_order_id||'').trim(); if(!epayOrderId) return res.status(400).json({error:'order_id required'}); const r=await q('SELECT order_id FROM orders WHERE epay_order_id=$1 LIMIT 1',[epayOrderId]); if(!r.rows[0]) return res.status(404).json({error:'Order not found'}); await verifyAndRelease(r.rows[0].order_id); res.json({ok:true}); }
   catch(e){ console.error('E Pay webhook:',e); res.status(500).json({error:'Webhook processing failed'}); }
+});
+
+app.get('/payment-success', async(req,res)=>{
+  try{
+    const orderId=String(req.query.order_id||'').trim();
+    if(orderId && String(process.env.EPAY_MERCHANT_KEY||'').trim()) await verifyAndRelease(orderId);
+  }catch(e){ console.warn('E Pay return verification:',e.message); }
+  res.set('Cache-Control','no-store');
+  res.redirect('/?payment_return=1');
 });
 
 app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile(path.join(__dirname,'public','admin.html')); });
