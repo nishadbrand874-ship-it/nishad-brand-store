@@ -140,3 +140,7 @@ Admin Panel → Store Settings → Price per ID अब public website, Custom Qu
 - Admin asset uploads are restricted to PNG/JPEG/WebP and 1 MB per file.
 - Production responses include HSTS.
 - UPI QR generation uses the configured Store Settings UPI VPA.
+
+
+## E Pay Dynamic QR + Auto Verification
+Render Environment Variables में `EPAY_MERCHANT_KEY` और `PUBLIC_BASE_URL` सेट करें। Customer payment के बाद server E Pay status API से confirmation check करता है; confirmed और exact amount match होने पर stock automatically fulfill होता है। API secret browser में नहीं जाता।

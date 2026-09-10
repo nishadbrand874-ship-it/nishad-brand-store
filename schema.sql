@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS orders (
   id BIGSERIAL PRIMARY KEY,
   order_id TEXT UNIQUE NOT NULL,
   qr_code_id TEXT UNIQUE,
+  epay_order_id TEXT,
+  epay_status TEXT,
   package_qty INTEGER NOT NULL,
   amount_paise INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'created',

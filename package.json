@@ -1,8 +1,8 @@
 {
   "name": "nishad-brand-id-store",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "private": true,
-  "description": "NISHAD BRAND ID Store with manual UPI QR payment and admin UTR approval",
+  "description": "NISHAD BRAND ID Store with E Pay Dynamic QR, automatic payment verification and automatic stock delivery",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
