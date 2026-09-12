@@ -73,7 +73,7 @@ app.use((req,res,next)=>{
     'X-Frame-Options':'DENY',
     'Referrer-Policy':'strict-origin-when-cross-origin',
     'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
-    'Content-Security-Policy':"default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self';"
+    'Content-Security-Policy':"default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com;"
   });
   if (process.env.NODE_ENV === 'production') res.set('Strict-Transport-Security','max-age=31536000; includeSubDomains');
   next();

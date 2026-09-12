@@ -96,7 +96,6 @@ async function init(){
     box.innerHTML=packages.map(p=>{const disabled=!p.available||!p.price;const label=!p.available?'Out of Stock':(!p.price?'Price Not Set':'Buy Now');return '<div class="card"><div class="qty">'+p.qty+' ID</div><div class="stock-mini '+(p.available?'in':'out')+'">'+(p.available?'✓ STOCK AVAILABLE':'✕ OUT OF STOCK')+'</div><div class="price">₹'+money(p.price)+'</div><button class="buy" '+(disabled?'disabled':'')+' onclick="openPay('+p.qty+','+Number(p.price||0)+')">'+label+'</button></div>';}).join('')+
       '<div class="card custom-card"><div class="qty">Custom Quantity</div><div class="stock-mini '+(Number(config.stock||0)>0?'in':'out')+'">'+(Number(config.stock||0)>0?'✓ '+Number(config.stock)+' ID AVAILABLE':'✕ OUT OF STOCK')+'</div><div class="custom-help">₹'+money(config.pricePerId)+' per ID • Enter how many IDs you need</div><div class="custom-row"><input id="customQty" class="customQty" type="number" min="1" max="'+Number(config.stock||0)+'" value="1" inputmode="numeric" oninput="updateCustomTotal()" onblur="normalizeCustomQty()"><div id="customTotal" class="price">₹'+money(config.pricePerId)+'</div></div><button class="buy" '+(!config.stock||!config.pricePerId?'disabled':'')+' onclick="buyCustom()">Buy Custom Quantity</button></div>'; 
     updateCustomTotal();
-    initTurnstile();
     startStoreAutoRefresh();
   }catch(e){$('packages').innerHTML='<div class="error">Store load failed: '+esc(e.message)+'</div>';}
 }
@@ -110,7 +109,7 @@ async function startQrPayment(){
   try{
     const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qty:selected.qty,name:'',phone:''})});
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'QR create failed');
-    $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').href=d.upiLink||'#'; $('upiOpen').classList.toggle('hidden',!d.upiLink); $('payText').textContent=d.quantity+' ID — ₹'+money(Number(d.amount!=null?d.amount/100:selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.amount||0)/100)+'</b><br>QR scan karke payment karein. Payment ke baad UTR / Transaction ID neeche submit karein. Admin approval ke baad ID release hogi.'; $('utrBox').classList.remove('hidden');
+    $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').href=d.upiLink||'#'; $('upiOpen').classList.toggle('hidden',!d.upiLink); $('payText').textContent=d.quantity+' ID — ₹'+money(Number(d.amount!=null?d.amount/100:selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.amount||0)/100)+'</b><br>QR scan karke payment karein. Payment ke baad UTR / Transaction ID neeche submit karein. Admin approval ke baad ID release hogi.'; $('utrBox').classList.remove('hidden'); setTimeout(initTurnstile,0);
     startCountdown(Number(d.expiresAt||Date.now()+300000));
     window.currentOrderId=d.orderId; window.currentOrderToken=d.orderToken||''; pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000); await checkQrStatus(d.orderId);
   }catch(e){$('payStatus').innerHTML='<div class="error">'+esc(e.message)+'</div>';}
