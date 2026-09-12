@@ -91,6 +91,29 @@ const pool = new Pool({
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+// Anonymous storefront visitor tracking. No IP address is stored.
+async function trackStoreVisit(req,res,next){
+  try{
+    if(req.method!=='GET' || req.path!=='/') return next();
+    let visitorId=String(req.cookies?.NB_VISITOR_ID||'').trim();
+    if(!/^[A-Za-z0-9_-]{20,80}$/.test(visitorId)){
+      visitorId=crypto.randomBytes(24).toString('base64url');
+      res.cookie('NB_VISITOR_ID',visitorId,{
+        httpOnly:true,
+        secure:process.env.NODE_ENV==='production',
+        sameSite:'lax',
+        path:'/',
+        maxAge:365*24*60*60*1000
+      });
+    }
+    const day=await q(`SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AS d`);
+    const visitDate=day.rows[0].d;
+    await q('INSERT INTO site_visits(visitor_id,path) VALUES($1,$2)',[visitorId,'/']);
+    await q('INSERT INTO site_unique_visits(visitor_id,visit_date) VALUES($1,$2) ON CONFLICT DO NOTHING',[visitorId,visitDate]);
+  }catch(e){ console.warn('Visitor tracking skipped:',e.message); }
+  next();
+}
+app.use(trackStoreVisit);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve the storefront explicitly at the root URL.
@@ -148,6 +171,24 @@ async function migrateOrdersSchema(){
   } catch (e) {
     console.warn('QR code index migration skipped:', e.message);
   }
+}
+
+async function migrateVisitorSchema(){
+  // Privacy-friendly anonymous visitor analytics: only a random browser ID is stored.
+  await q(`CREATE TABLE IF NOT EXISTS site_visits (
+    id BIGSERIAL PRIMARY KEY,
+    visitor_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    visited_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await q(`CREATE TABLE IF NOT EXISTS site_unique_visits (
+    visitor_id TEXT NOT NULL,
+    visit_date DATE NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY(visitor_id, visit_date)
+  )`);
+  await q('CREATE INDEX IF NOT EXISTS site_visits_visited_at_idx ON site_visits(visited_at)');
+  await q('CREATE INDEX IF NOT EXISTS site_unique_visits_date_idx ON site_unique_visits(visit_date)');
 }
 
 async function migrateInventoryEncryption(){
@@ -210,12 +251,17 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
   const sold=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='sold'");
   const orders=await q("SELECT order_id,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
   const inv=await q("SELECT id,status,sold_order_id,created_at FROM inventory ORDER BY id DESC LIMIT 500");
+  const visitorStats=await q(`SELECT
+    (SELECT COUNT(*)::int FROM site_visits WHERE (visited_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) AS today_visits,
+    (SELECT COUNT(*)::int FROM site_unique_visits WHERE visit_date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) AS today_unique_visitors,
+    (SELECT COUNT(*)::int FROM site_visits) AS total_visits,
+    (SELECT COUNT(*)::int FROM site_unique_visits) AS total_unique_visitors`);
   const today=await q(`SELECT
     (SELECT COUNT(*)::int FROM inventory WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status='sold') AS today_sold_ids,
     (SELECT COUNT(*)::int FROM inventory WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) AS today_ids_added,
     (SELECT COUNT(*)::int FROM orders WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status='rejected') AS today_rejected,
     (SELECT COUNT(*)::int FROM orders WHERE (fulfilled_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status IN ('approved','paid')) AS today_approved`);
-  res.json({settings:s,stock:stock.rows[0].count,sold:sold.rows[0].count,orders:orders.rows,inventory:inv.rows,today:today.rows[0]});
+  res.json({settings:s,stock:stock.rows[0].count,sold:sold.rows[0].count,orders:orders.rows,inventory:inv.rows,today:today.rows[0],visitors:visitorStats.rows[0]});
 });
 
 app.post('/api/admin/settings',auth,async(req,res)=>{
@@ -389,6 +435,7 @@ app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile
   try{
     await q(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
     await migrateOrdersSchema();
+    await migrateVisitorSchema();
     await migrateInventoryEncryption();
     await normalizeStorePrice();
     app.listen(PORT,()=>console.log(`NISHAD BRAND running on ${PORT}`));

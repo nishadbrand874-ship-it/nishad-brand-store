@@ -50,3 +50,20 @@ INSERT INTO settings(key,value) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 CREATE UNIQUE INDEX IF NOT EXISTS orders_utr_unique ON orders(LOWER(utr)) WHERE utr IS NOT NULL;
+
+
+-- Anonymous website visitor analytics. No IP address or personal identity is stored.
+CREATE TABLE IF NOT EXISTS site_visits (
+  id BIGSERIAL PRIMARY KEY,
+  visitor_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  visited_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS site_unique_visits (
+  visitor_id TEXT NOT NULL,
+  visit_date DATE NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY(visitor_id, visit_date)
+);
+CREATE INDEX IF NOT EXISTS site_visits_visited_at_idx ON site_visits(visited_at);
+CREATE INDEX IF NOT EXISTS site_unique_visits_date_idx ON site_unique_visits(visit_date);
