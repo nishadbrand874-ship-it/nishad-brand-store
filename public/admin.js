@@ -9,18 +9,53 @@ async function login(){const r=await fetch('/api/admin/login',{method:'POST',hea
 async function logout(){await fetch('/api/admin/logout',{method:'POST'});location.reload();}
 function statusBadge(s){const map={payment_received:['PENDING APPROVAL','pending'],approved:['APPROVED','approved'],paid:['APPROVED','approved'],rejected:['REJECTED','rejected'],created:['WAITING PAYMENT','created']};const a=map[s]||[String(s).toUpperCase(), 'created'];return '<span class="badge '+a[1]+'">'+a[0]+'</span>';}
 function renderDashboardStats(d){const t=d.today||{};return '<div class="stat today-sold"><span>🛒 Today Sold IDs</span><b>'+Number(t.today_sold_ids||0)+'</b><small>आज बिके हुए IDs</small></div><div class="stat today-added"><span>➕ Today IDs Added</span><b>'+Number(t.today_ids_added||0)+'</b><small>आज stock में जोड़े गए</small></div><div class="stat today-rejected"><span>❌ Today Reject</span><b>'+Number(t.today_rejected||0)+'</b><small>आज rejected payments</small></div><div class="stat today-approved"><span>✅ Today Approve</span><b>'+Number(t.today_approved||0)+'</b><small>आज approved payments</small></div><div class="stat"><span>📦 Available IDs</span><b>'+Number(d.stock||0)+'</b><small>Current stock</small></div><div class="stat"><span>📊 Total Sold IDs</span><b>'+Number(d.sold||0)+'</b><small>All-time sold</small></div><div class="stat"><span>⏳ Pending Approval</span><b>'+(d.orders||[]).filter(x=>x.status==='payment_received').length+'</b><small>Waiting for admin</small></div><div class="stat"><span>🧾 Recent Orders</span><b>'+(d.orders||[]).length+'</b><small>Latest 100 orders</small></div>';}
+function speakPaymentRequest(){
+  if(paymentAlertBusy) return;
+  paymentAlertBusy=true;
+  try{
+    const voices=window.speechSynthesis?.getVoices?.()||[];
+    const hi=voices.find(v=>/^hi(-|_)?IN/i.test(v.lang||'')) || voices.find(v=>/hindi/i.test(v.name||'')) || voices.find(v=>/^hi/i.test(v.lang||''));
+    let count=0;
+    const speakOne=()=>{
+      if(count>=3){paymentAlertBusy=false;return;}
+      const u=new SpeechSynthesisUtterance('Boss, payment request aaya hai.');
+      u.lang='hi-IN';
+      u.rate=0.9;
+      u.pitch=1.12;
+      u.volume=1;
+      if(hi) u.voice=hi;
+      u.onend=()=>{count++;setTimeout(speakOne,180);};
+      u.onerror=()=>{count++;setTimeout(speakOne,180);};
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    };
+    speakOne();
+  }catch(e){paymentAlertBusy=false;console.warn('Payment voice alert:',e);}
+}
+function checkForNewPaymentRequests(rows){
+  const current=new Set((rows||[]).filter(r=>r.status==='payment_received').map(r=>String(r.order_id)));
+  if(!paymentAlertReady){
+    knownPaymentRequestIds=current;
+    paymentAlertReady=true;
+    return;
+  }
+  let isNew=false;
+  current.forEach(id=>{if(!knownPaymentRequestIds.has(id)) isNew=true;});
+  knownPaymentRequestIds=current;
+  if(isNew) speakPaymentRequest();
+}
 function startOrdersAutoRefresh(){
   if(ordersRefreshTimer) return;
   ordersRefreshTimer=setInterval(async ()=>{
     if(ordersRefreshBusy) return;
-    const ordersSection=$('orders');
-    if(!ordersSection || ordersSection.classList.contains('hidden')) return;
     ordersRefreshBusy=true;
     try{
       const r=await fetch('/api/admin/dashboard?ts='+Date.now(),{cache:'no-store'});
       if(!r.ok) return;
       const d=await r.json();
-      $('ordersTable').innerHTML=ordersTable(d.orders||[]);
+      checkForNewPaymentRequests(d.orders||[]);
+      const ordersSection=$('orders');
+      if(ordersSection && !ordersSection.classList.contains('hidden')) $('ordersTable').innerHTML=ordersTable(d.orders||[]);
       $('dash').innerHTML=renderDashboardStats(d);
     }catch(e){ console.warn('Auto refresh:',e); }
     finally{ ordersRefreshBusy=false; }
@@ -31,6 +66,7 @@ function stopOrdersAutoRefresh(){
 }
 
 async function load(){const r=await fetch('/api/admin/dashboard?ts='+Date.now(),{cache:'no-store'});if(!r.ok){$('panel').classList.add('hidden');$('login').classList.remove('hidden');return;}const d=await r.json();
+checkForNewPaymentRequests(d.orders||[]);
 $('dash').innerHTML=renderDashboardStats(d);
 const s=d.settings||{};$('settings').innerHTML='<div class="gateway-tip">📱 <b>UPI QR:</b> हर order में खरीदी गई ID की संख्या के हिसाब से exact amount वाला UPI QR अपने आप बनेगा. Payment के बाद customer UTR submit करेगा और आप manually approve करेंगे.</div><div class="formgrid">'+[['site_name','Site Name'],['whatsapp_number','WhatsApp Number'],['price_per_id','Price per ID'],['upi_vpa','UPI ID / VPA'],['upi_name','UPI Payee Name']].map(([k,l])=>'<label>'+l+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>').join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows="4" placeholder="Store news यहाँ लिखें...">'+esc(s.news||'')+'</textarea></label>';
 $('ordersTable').innerHTML=ordersTable(d.orders||[]);$('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);}
