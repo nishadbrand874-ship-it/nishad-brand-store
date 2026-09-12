@@ -454,3 +454,19 @@ body:after{width:360px;height:360px;right:-150px;bottom:5%;background:radial-gra
 
 .claim-box{margin-top:18px;padding:16px;border-radius:16px;border:1px solid rgba(20,184,166,.35);background:rgba(20,184,166,.08)}
 .claim-box h3{margin:0 0 6px}.claim-box p{margin:0 0 12px}.claim-box .checkrow{margin-top:10px}
+
+/* Premium UTR Check + Bonus Claim buttons */
+.checkrow button[onclick="checkUTR()"]{
+  background:linear-gradient(135deg,#7c3aed,#2563eb)!important;
+  color:#fff!important;border:0!important;border-radius:12px!important;
+  font-weight:900!important;box-shadow:0 8px 22px rgba(37,99,235,.28)!important;
+}
+.claim-box .checkrow button[onclick="claimBonus()"]{
+  background:linear-gradient(135deg,#f59e0b,#ef4444)!important;
+  color:#fff!important;border:0!important;border-radius:12px!important;
+  font-weight:900!important;box-shadow:0 8px 22px rgba(239,68,68,.25)!important;
+}
+.checkrow button[onclick="checkUTR()"]:hover,.claim-box .checkrow button[onclick="claimBonus()"]:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.checkrow button[onclick="checkUTR()"]:active,.claim-box .checkrow button[onclick="claimBonus()"]:active{transform:translateY(0)}
+
+.claim-admin-head{margin-top:22px}.claim-admin-head h2{margin-bottom:4px}.claim-admin-head p{margin:0}

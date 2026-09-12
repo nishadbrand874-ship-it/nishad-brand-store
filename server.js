@@ -145,6 +145,8 @@ async function migrateOrdersSchema(){
   // CREATE TABLE IF NOT EXISTS does not modify an already-existing orders table.
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS qr_code_id TEXT');
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS claim_used_at TIMESTAMPTZ');
+  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS claim_requested_at TIMESTAMPTZ');
+  await q("ALTER TABLE orders ADD COLUMN IF NOT EXISTS claim_status TEXT");
   try {
     await q('CREATE UNIQUE INDEX IF NOT EXISTS orders_qr_code_id_unique ON orders(qr_code_id) WHERE qr_code_id IS NOT NULL');
   } catch (e) {
@@ -210,7 +212,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
   const s=await settings();
   const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   const sold=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='sold'");
-  const orders=await q("SELECT order_id,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
+  const orders=await q("SELECT order_id,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at,claim_used_at,claim_requested_at,claim_status FROM orders ORDER BY created_at DESC LIMIT 100");
   const inv=await q("SELECT id,status,sold_order_id,created_at FROM inventory ORDER BY id DESC LIMIT 500");
   const today=await q(`SELECT
     (SELECT COUNT(*)::int FROM inventory WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status='sold') AS today_sold_ids,
@@ -400,27 +402,58 @@ app.post('/api/claim-bonus/:utr', claimRateLimit, async(req,res)=>{
   try{
     await client.query('BEGIN');
     const r=await client.query('SELECT * FROM orders WHERE LOWER(utr)=LOWER($1) LIMIT 1 FOR UPDATE',[utr]);
-    if(!r.rows[0]){await client.query('ROLLBACK');return res.status(404).json({error:'This UTR was not found'});}
+    if(!r.rows[0]){await client.query('ROLLBACK');return res.status(404).json({error:'NOT FOUND: This UTR was not found'});}
     const order=r.rows[0];
-    if(order.package_qty!==10){await client.query('ROLLBACK');return res.status(400).json({error:'1 ID claim is available only for a 10 ID purchase'});}
+    if(order.package_qty!==10){await client.query('ROLLBACK');return res.status(400).json({error:'NOT FOUND: This UTR is not linked to a 10 ID purchase'});}
     if(order.status!=='approved' && order.status!=='paid'){await client.query('ROLLBACK');return res.status(400).json({error:'Payment must be approved before claiming the bonus ID'});}
     const originalItems=await client.query('SELECT COUNT(*)::int AS count FROM order_items WHERE order_id=$1',[order.order_id]);
-    if(originalItems.rows[0].count < 10){await client.query('ROLLBACK');return res.status(400).json({error:'This order is not eligible for the 10 ID bonus claim'});}
-    if(order.claim_used_at){await client.query('ROLLBACK');return res.status(409).json({error:'This UTR has already used the 1 ID claim'});}
+    if(originalItems.rows[0].count < 10){await client.query('ROLLBACK');return res.status(400).json({error:'NOT FOUND: This order is not eligible for the 10 ID bonus claim'});}
+    if(order.claim_status==='approved' || order.claim_used_at){await client.query('ROLLBACK');return res.status(409).json({error:'This UTR has already used the 1 ID claim'});}
+    if(order.claim_status==='pending' || order.claim_requested_at){
+      await client.query('ROLLBACK');
+      return res.json({ok:true,pending:true,message:'Claim request already sent. Waiting for admin approval.'});
+    }
+    if(order.claim_status==='rejected'){await client.query('ROLLBACK');return res.status(409).json({error:'This UTR claim request was rejected and cannot be claimed again'});}
     if(!order.fulfilled_at){await client.query('ROLLBACK');return res.status(400).json({error:'Claim window is not available'});}
     const deadline=new Date(order.fulfilled_at).getTime()+24*60*60*1000;
     if(Date.now()>deadline){await client.query('ROLLBACK');return res.status(410).json({error:'24-hour claim window has expired'});}
+    await client.query("UPDATE orders SET claim_requested_at=NOW(), claim_status='pending' WHERE order_id=$1",[order.order_id]);
+    await client.query('COMMIT');
+    res.json({ok:true,pending:true,message:'Claim request sent to admin for approval.',orderId:order.order_id,utr:order.utr});
+  }catch(e){try{await client.query('ROLLBACK')}catch{};console.error('Claim request error:',e);res.status(500).json({error:'Could not submit claim request'});}
+  finally{client.release();}
+});
+
+app.post('/api/admin/orders/:orderId/claim-approve',auth,async(req,res)=>{
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const r=await client.query('SELECT * FROM orders WHERE order_id=$1 FOR UPDATE',[req.params.orderId]);
+    if(!r.rows[0]){await client.query('ROLLBACK');return res.status(404).json({error:'Order not found'});}
+    const order=r.rows[0];
+    if(order.package_qty!==10 || (order.status!=='approved' && order.status!=='paid')){await client.query('ROLLBACK');return res.status(400).json({error:'Only an approved 10 ID purchase can receive the bonus'});}
+    if(order.claim_status==='approved' || order.claim_used_at){await client.query('ROLLBACK');return res.json({ok:true,already:true});}
+    if(order.claim_status!=='pending'){await client.query('ROLLBACK');return res.status(400).json({error:'No pending claim request'});}
+    if(!order.fulfilled_at || Date.now()>new Date(order.fulfilled_at).getTime()+24*60*60*1000){await client.query('ROLLBACK');return res.status(410).json({error:'24-hour claim window has expired'});}
     const item=await client.query("SELECT id FROM inventory WHERE status='available' ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT 1");
-    if(!item.rows[0]){await client.query('ROLLBACK');return res.status(409).json({error:'Bonus ID is temporarily out of stock. Please try again before the 24-hour claim window expires.'});}
+    if(!item.rows[0]){await client.query('ROLLBACK');return res.status(409).json({error:'Bonus ID is out of stock'});}
     const inventoryId=item.rows[0].id;
     await client.query("UPDATE inventory SET status='sold',sold_order_id=$1,reserved_order_id=NULL WHERE id=$2",[order.order_id,inventoryId]);
     await client.query('INSERT INTO order_items(order_id,inventory_id) VALUES($1,$2)',[order.order_id,inventoryId]);
-    await client.query('UPDATE orders SET claim_used_at=NOW() WHERE order_id=$1',[order.order_id]);
+    await client.query("UPDATE orders SET claim_used_at=NOW(),claim_status='approved' WHERE order_id=$1",[order.order_id]);
     await client.query('COMMIT');
     const claimed=await q('SELECT i.login_id,i.login_password,i.extra_data FROM inventory i WHERE i.id=$1',[inventoryId]);
     const x=claimed.rows[0];
-    res.json({ok:true,message:'Bonus 1 ID claimed successfully',orderId:order.order_id,claimUsedAt:new Date().toISOString(),items:[{login_id:decryptSecret(x.login_id),login_password:decryptSecret(x.login_password),extra_data:decryptSecret(x.extra_data)}]});
-  }catch(e){try{await client.query('ROLLBACK')}catch{};console.error('Bonus claim error:',e);res.status(500).json({error:'Could not claim bonus ID'});}finally{client.release();}
+    res.json({ok:true,message:'Claim approved and 1 ID released',items:[{login_id:decryptSecret(x.login_id),login_password:decryptSecret(x.login_password),extra_data:decryptSecret(x.extra_data)}]});
+  }catch(e){try{await client.query('ROLLBACK')}catch{};console.error('Claim approve error:',e);res.status(500).json({error:'Could not approve claim'});}
+  finally{client.release();}
+});
+app.post('/api/admin/orders/:orderId/claim-reject',auth,async(req,res)=>{
+  try{
+    const r=await q("UPDATE orders SET claim_status='rejected' WHERE order_id=$1 AND claim_status='pending' RETURNING order_id",[req.params.orderId]);
+    if(!r.rows[0]) return res.status(400).json({error:'Only pending claim requests can be rejected'});
+    res.json({ok:true});
+  }catch(e){res.status(500).json({error:'Could not reject claim'});}
 });
 
 app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });

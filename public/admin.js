@@ -172,7 +172,7 @@ function startOrdersAutoRefresh(){
       const pending=voicePendingOrders;
       if(pending.length) latestPaymentRequestId=String(pending[0].order_id); else latestPaymentRequestId=null;
       const ordersSection=$('orders');
-      if(ordersSection && !ordersSection.classList.contains('hidden')) $('ordersTable').innerHTML=ordersTable(d.orders||[]);
+      if(ordersSection && !ordersSection.classList.contains('hidden')) { $('ordersTable').innerHTML=ordersTable(d.orders||[]); const c=$('claimRequestsTable'); if(c) c.innerHTML=claimRequestsTable(d.orders||[]); }
       $('dash').innerHTML=renderDashboardStats(d);
     }catch(e){ console.warn('Auto refresh:',e); }
     finally{ ordersRefreshBusy=false; }
@@ -186,7 +186,8 @@ async function load(){const r=await fetch('/api/admin/dashboard?ts='+Date.now(),
 checkForNewPaymentRequests(d.orders||[]);
 $('dash').innerHTML=renderDashboardStats(d);
 const s=d.settings||{};$('settings').innerHTML='<div class="gateway-tip">📱 <b>UPI QR:</b> हर order में खरीदी गई ID की संख्या के हिसाब से exact amount वाला UPI QR अपने आप बनेगा. Payment के बाद customer UTR submit करेगा और आप manually approve करेंगे.</div><div class="formgrid">'+[['site_name','Site Name'],['whatsapp_number','WhatsApp Number'],['price_per_id','Price per ID'],['upi_vpa','UPI ID / VPA'],['upi_name','UPI Payee Name']].map(([k,l])=>'<label>'+l+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>').join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows="4" placeholder="Store news यहाँ लिखें...">'+esc(s.news||'')+'</textarea></label>';
-$('ordersTable').innerHTML=ordersTable(d.orders||[]);$('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);}
+$('ordersTable').innerHTML=ordersTable(d.orders||[])+ '<div class="section-head claim-admin-head"><div><span class="eyebrow">BONUS CLAIMS</span><h2>1 ID Claim Approvals</h2><p>10 ID purchase वाले UTR की claim requests यहाँ approve/reject करें.</p></div></div><div id="claimRequestsTable">'+claimRequestsTable(d.orders||[])+'</div>';
+$('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);}
 function ordersTable(rows){
   // Payment Approvals में केवल UTR/payment submit किए हुए orders दिखाएँ.
   // WAITING PAYMENT (created) orders user के order-check flow में रहेंगे,
@@ -195,6 +196,15 @@ function ordersTable(rows){
   if(!rows.length)return '<div class="empty">No payment requests yet.</div>';
   return '<div class="table-wrap"><table><thead><tr><th>Order</th><th>Amount</th><th>UTR / Payment</th><th>Status</th><th>Created</th><th>Action</th></tr></thead><tbody>'+rows.map(r=>'<tr><td><b>'+esc(r.order_id)+'</b><br>'+esc(r.package_qty)+' ID</td><td>₹'+(Number(r.amount_paise||0)/100).toLocaleString('en-IN')+'</td><td><code>'+esc(r.utr||r.payment_id||'—')+'</code></td><td>'+statusBadge(r.status)+'</td><td>'+esc(new Date(r.created_at).toLocaleString('en-IN'))+'</td><td>'+(r.status==='payment_received'?'<button class="approve" onclick="approve(\''+esc(r.order_id)+'\')">✓ APPROVE & RELEASE ID</button><button class="reject" onclick="rejectOrder(\''+esc(r.order_id)+'\')">Reject</button>':r.status==='approved'||r.status==='paid'?'<span class="oktext">ID released</span>':r.status==='rejected'?'<span class="oktext">Rejected</span>':'—')+'</td></tr>').join('')+'</tbody></table></div>';
 }
+function claimRequestsTable(rows){
+  const pending=(rows||[]).filter(r=>r.claim_status==='pending');
+  if(!pending.length) return '<div class="empty">No pending 1 ID claim requests.</div>';
+  return '<div class="table-wrap"><table><thead><tr><th>Order</th><th>UTR</th><th>Claim</th><th>Requested</th><th>Action</th></tr></thead><tbody>'+
+    pending.map(r=>'<tr><td><b>'+esc(r.order_id)+'</b><br>10 ID purchase</td><td><code>'+esc(r.utr||'—')+'</code></td><td><span class="status approved">1 ID BONUS</span></td><td>'+esc(r.claim_requested_at?new Date(r.claim_requested_at).toLocaleString('en-IN'):'—')+'</td><td><button class="approve" onclick="approveClaim(\''+esc(r.order_id)+'\')">✓ APPROVE & RELEASE 1 ID</button><button class="reject" onclick="rejectClaim(\''+esc(r.order_id)+'\')">Reject Claim</button></td></tr>').join('')+
+    '</tbody></table></div>';
+}
+async function approveClaim(id){if(!confirm('1 bonus ID claim approve karke release karni hai?'))return;const r=await fetch('/api/admin/orders/'+encodeURIComponent(id)+'/claim-approve',{method:'POST'});const d=await r.json();alert(r.ok?'ठीक है बॉस, 1 bonus ID claim approve कर दी.':d.error||'Claim approval failed');if(r.ok)load();}
+async function rejectClaim(id){if(!confirm('Is 1 ID claim ko reject karna hai?'))return;const r=await fetch('/api/admin/orders/'+encodeURIComponent(id)+'/claim-reject',{method:'POST'});const d=await r.json();alert(r.ok?'Claim rejected.':d.error||'Claim reject failed');if(r.ok)load();}
 function inventoryTable(rows){if(!rows.length)return '<div class="empty">Inventory empty.</div>';return '<div class="secure-note">🔐 ID/password values are stored securely on the server and are not exposed in the browser inventory list.</div><div class="table-wrap"><table><thead><tr><th>Record</th><th>Status</th><th>Order</th><th>Added</th><th></th></tr></thead><tbody>'+rows.map(r=>'<tr><td>#'+Number(r.id)+'</td><td>'+statusBadge(r.status)+'</td><td>'+esc(r.sold_order_id||'—')+'</td><td>'+esc(new Date(r.created_at).toLocaleString('en-IN'))+'</td><td>'+ (r.status==='available'?'<button class="reject" onclick="deleteID('+Number(r.id)+')">Delete</button>':'')+'</td></tr>').join('')+'</tbody></table></div>';}
 
 async function approve(id){if(!confirm('Payment verify karke ID release karni hai?'))return;const r=await fetch('/api/admin/orders/'+encodeURIComponent(id)+'/approve',{method:'POST'});const d=await r.json();alert(r.ok?'Payment approved — ID released.':d.error||'Approval failed');if(r.ok)load();}
