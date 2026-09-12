@@ -1,6 +1,9 @@
 'use strict';
 let ordersRefreshTimer=null;
 let ordersRefreshBusy=false;
+let paymentAlertBusy=false;
+let paymentAlertReady=false;
+let knownPaymentRequestIds=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 function toggleMenu(){$('menu').classList.toggle('hidden')}
