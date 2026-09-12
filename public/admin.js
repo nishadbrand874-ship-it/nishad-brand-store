@@ -9,7 +9,24 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 function toggleMenu(){$('menu').classList.toggle('hidden')}
 function showSection(id){document.querySelectorAll('.section').forEach(x=>x.classList.add('hidden'));$(id).classList.remove('hidden');$('menu').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'});}
 async function login(){const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('user').value,password:$('pass').value})});const d=await r.json();if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}else $('msg').textContent=d.error||'Login failed';}
-async function logout(){await fetch('/api/admin/logout',{method:'POST'});location.reload();}
+async function logout(){
+  // Logout in one click: stop client activity immediately, clear the server cookie,
+  // then replace the page so the login screen is shown without requiring a second click.
+  try{
+    if(ordersRefreshTimer){clearInterval(ordersRefreshTimer);ordersRefreshTimer=null;}
+    if(voiceRecognition){try{voiceRecognition.stop();}catch(e){}}
+    voiceControlOn=false;
+    try{window.speechSynthesis?.cancel?.();}catch(e){}
+    document.querySelectorAll('#menu button').forEach(b=>{
+      if(/logout/i.test(b.textContent||'')){b.disabled=true;b.textContent='↪ Logging out...';}
+    });
+    await fetch('/api/admin/logout',{method:'POST',credentials:'same-origin',cache:'no-store'});
+  }catch(e){
+    console.warn('Logout request:',e);
+  }finally{
+    location.replace('/admin.html');
+  }
+}
 
 let voiceRecognition=null;
 let voiceControlOn=false;

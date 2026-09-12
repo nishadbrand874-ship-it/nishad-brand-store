@@ -1,8 +1,30 @@
 'use strict';
-let config=null, selected=null, pollTimer=null, countdownTimer=null, storeRefreshTimer=null, storeRefreshBusy=false, turnstileWidgetId=null;
+let config=null, selected=null, pollTimer=null, countdownTimer=null, storeRefreshTimer=null, storeRefreshBusy=false, turnstileWidgetId=null, siteGateWidgetId=null, siteVerified=false, siteGateBusy=false;
 const $=id=>document.getElementById(id);
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 function money(n){return Number(n||0).toLocaleString('en-IN');}
+function siteGateSiteKey(){ return String(document.querySelector('meta[name="cf-turnstile-site-key"]')?.content||'').trim(); }
+function revealSite(){ siteVerified=true; document.body.classList.add('site-verified'); const g=$('siteGate'); if(g) g.classList.add('hidden'); }
+async function verifySiteToken(token){
+  if(siteGateBusy || !token) return;
+  siteGateBusy=true; const msg=$('siteGateMsg'); if(msg) msg.textContent='Verifying…';
+  try{
+    const r=await fetch('/api/site-verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Cloudflare verification failed');
+    revealSite(); await initStoreAfterGate();
+  }catch(e){ if(msg) msg.textContent=String(e.message||'Cloudflare verification failed'); try{if(siteGateWidgetId!==null&&window.turnstile)window.turnstile.reset(siteGateWidgetId);}catch{} }
+  finally{siteGateBusy=false;}
+}
+function initSiteGate(){
+  const box=$('siteTurnstile'), key=siteGateSiteKey();
+  if(!box || !key) return;
+  if(!window.turnstile){ setTimeout(initSiteGate,400); return; }
+  if(siteGateWidgetId!==null) return;
+  try{ siteGateWidgetId=window.turnstile.render(box,{sitekey:key,theme:'light',appearance:'always',execution:'render',callback:verifySiteToken,'expired-callback':()=>{const m=$('siteGateMsg');if(m)m.textContent='Verification expired. Please verify again.';},'error-callback':()=>{const m=$('siteGateMsg');if(m)m.textContent='Cloudflare verification error. Please try again.';}}); }catch(e){ console.warn('Site Turnstile init:',e); setTimeout(initSiteGate,1000); }
+}
+async function initStoreAfterGate(){ if(config) return init(); return init(); }
+
 async function refreshStoreStock(){
   if(storeRefreshBusy) return;
   storeRefreshBusy=true;
@@ -85,6 +107,7 @@ function getTurnstileToken(){
 function resetTurnstile(){try{if(turnstileWidgetId!==null&&window.turnstile)window.turnstile.reset(turnstileWidgetId);}catch{}}
 
 async function init(){
+  if(!siteVerified){ initSiteGate(); return; }
   try{
     const r=await fetch('/api/config?ts='+Date.now(),{cache:'no-store'}); config=await r.json(); if(!r.ok) throw new Error(config.error||'Configuration failed');
     $('siteName').textContent=config.siteName||'NISHAD BRAND'; $('logo').src=config.logo||'/logo.png';

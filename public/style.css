@@ -470,3 +470,17 @@ body:after{width:360px;height:360px;right:-150px;bottom:5%;background:radial-gra
 .checkrow button[onclick="checkUTR()"]:active,.claim-box .checkrow button[onclick="claimBonus()"]:active{transform:translateY(0)}
 
 .claim-admin-head{margin-top:22px}.claim-admin-head h2{margin-bottom:4px}.claim-admin-head p{margin:0}
+
+
+/* V44.16: site-wide Cloudflare first-load gate */
+.site-gate{position:fixed;inset:0;z-index:100000;background:linear-gradient(135deg,#07152f,#123d70 55%,#075985);display:grid;place-items:center;padding:20px;box-sizing:border-box}
+.site-gate.hidden{display:none!important}
+.site-gate-card{width:min(420px,94vw);background:#fff;border-radius:22px;padding:28px 22px;box-shadow:0 30px 90px rgba(0,0,0,.35);text-align:center;box-sizing:border-box}
+.site-gate-logo{width:62px;height:62px;margin:0 auto 12px;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.site-gate-logo img{width:100%;height:100%;object-fit:contain}
+.site-gate-card h2{margin:5px 0 7px;color:#0f172a;font-size:23px}
+.site-gate-card p{margin:0 auto 18px;color:#64748b;font-size:13px;line-height:1.5}
+.site-turnstile{min-height:70px;display:flex;justify-content:center;align-items:center}
+.site-gate-msg{margin-top:12px;color:#64748b;font-size:12px;min-height:18px}
+body:not(.site-verified){overflow:hidden}
+@media(max-width:520px){.site-gate-card{padding:24px 16px;border-radius:18px}.site-gate-card h2{font-size:20px}}

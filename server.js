@@ -13,6 +13,7 @@ const QRCode = require('qrcode');
 const app = express();
 app.set('trust proxy', 1);
 const ADMIN_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-nishad_admin' : 'nishad_admin';
+const CF_GATE_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-nishad_cf_verified' : 'nishad_cf_verified';
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 1 * 1024 * 1024, files: 2 },
@@ -91,10 +92,17 @@ const pool = new Pool({
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve the storefront explicitly at the root URL.
-app.get('/', (req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
+// Serve the storefront with the Turnstile Site Key embedded for the first-load gate.
+app.get('/', (req,res)=>{
+  try {
+    const file=fs.readFileSync(path.join(__dirname,'public','index.html'),'utf8');
+    const siteKey=String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim().replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/</g,'&lt;');
+    res.set('Cache-Control','no-store');
+    res.type('html').send(file.replace('__CF_TURNSTILE_SITE_KEY__',siteKey));
+  } catch { res.status(500).send('Storefront unavailable'); }
+});
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (req,res)=>res.json({ok:true,service:'nishad-brand-store'}));
 
@@ -127,6 +135,17 @@ function recordLoginFailure(key){
 function clearLoginFailures(key){loginAttempts.delete(key);}
 setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of apiHits) if(now-v.first>60*1000) apiHits.delete(k); for(const [k,v] of claimHits) if(now-v.first>10*60*1000) claimHits.delete(k); },5*60*1000).unref();
 
+
+function siteGate(req,res,next){
+  try {
+    const token=String(req.cookies[CF_GATE_COOKIE]||'');
+    if(!token) return res.status(403).json({error:'Cloudflare verification required'});
+    const data=jwt.verify(token, process.env.JWT_SECRET);
+    if(data?.type!=='cloudflare_gate') throw new Error('Invalid gate');
+    next();
+  } catch { res.status(403).json({error:'Cloudflare verification required'}); }
+}
+function signSiteGateToken(){ return jwt.sign({type:'cloudflare_gate',jti:crypto.randomBytes(16).toString('hex')}, process.env.JWT_SECRET, {expiresIn:'12h'}); }
 
 function auth(req,res,next){
   try {
@@ -184,7 +203,24 @@ function publicSettings(s, stock=0){
   return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim()};
 }
 
-app.get('/api/config', async (req,res)=>{
+app.post('/api/site-verify', rateLimit(apiHits,60*1000,30), async (req,res)=>{
+  try {
+    const secret=String(process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY||'').trim();
+    const token=String(req.body?.token||'').trim();
+    if(!secret) return res.status(503).json({error:'Cloudflare protection is not configured'});
+    if(!token) return res.status(400).json({error:'Cloudflare verification required'});
+    const body=new URLSearchParams({secret,response:token});
+    const ip=clientIp(req); if(ip && ip!=='unknown') body.set('remoteip',ip);
+    const r=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
+    const cf=await r.json();
+    const host=String(cf?.hostname||'').toLowerCase();
+    if(!cf?.success || (host && host!=='nishadbrand.online' && host!=='www.nishadbrand.online')) return res.status(403).json({error:'Cloudflare verification failed'});
+    res.cookie(CF_GATE_COOKIE,signSiteGateToken(),{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:12*60*60*1000});
+    res.json({ok:true});
+  } catch(e){ console.error('Cloudflare site verification error:',e.message); res.status(502).json({error:'Cloudflare verification failed'}); }
+});
+
+app.get('/api/config', siteGate, async (req,res)=>{
   res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma','no-cache');
   try {
@@ -301,7 +337,7 @@ async function createOrder(req,res){
     res.json({orderId,orderToken,qrImage,upiLink,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000});
   }catch(e){console.error('Manual UPI order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
-app.post('/api/orders', rateLimit(apiHits,60*1000,20), createOrder);
+app.post('/api/orders', siteGate, rateLimit(apiHits,60*1000,20), createOrder);
 
 function verifyOrderToken(order,token){
   if(!order || !order.qr_code_id || !token) return false;
@@ -322,7 +358,7 @@ async function verifyTurnstile(token, req){
   }catch(e){ console.error('Turnstile verify error:',e); return {ok:false, reason:'Cloudflare verification unavailable'}; }
 }
 
-app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{
+app.post('/api/orders/:orderId/utr', siteGate, rateLimit(apiHits,60*1000,20), async(req,res)=>{
   try{
     const cf=await verifyTurnstile(req.body?.turnstileToken,req);
     if(!cf.ok) return res.status(403).json({error:cf.reason});
@@ -353,7 +389,7 @@ app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,re
   }
 });
 
-app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(req,res)=>{
+app.get('/api/payment/qr-status/:orderId', siteGate, rateLimit(apiHits,60*1000,60), async(req,res)=>{
   try{
     const ord=await q('SELECT order_id,qr_code_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
@@ -409,7 +445,7 @@ function claimRateLimit(req,res,next){
   if(a.count>5) return res.status(429).json({error:'Too many claim attempts. Please try again later.'});
   next();
 }
-app.post('/api/claim-bonus/:utr', claimRateLimit, async(req,res)=>{
+app.post('/api/claim-bonus/:utr', siteGate, claimRateLimit, async(req,res)=>{
   const utr=String(req.params.utr||'').trim().replace(/\s+/g,'');
   if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'});
   const client=await pool.connect();
@@ -470,7 +506,7 @@ app.post('/api/admin/orders/:orderId/claim-reject',auth,async(req,res)=>{
   }catch(e){res.status(500).json({error:'Could not reject claim'});}
 });
 
-app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
+app.get('/api/order-check/:utr', siteGate, rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
 
 app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile(path.join(__dirname,'public','admin.html')); });
 
