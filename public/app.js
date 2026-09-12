@@ -182,11 +182,14 @@ async function claimBonus(){
     const r=await fetch('/api/claim-bonus/'+encodeURIComponent(utr),{method:'POST',headers:{'Content-Type':'application/json'}});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Claim failed');
-    const rows=(d.items||[]).map((x,i)=>'<div class="idrow"><b>Bonus ID:</b> <code>'+esc(x.login_id)+'</code>'+(x.login_password?'<br><b>Password:</b> <code>'+esc(x.login_password)+'</code>':'')+(x.extra_data?'<br>'+esc(x.extra_data):'')+'</div>').join('');
-    out.innerHTML='<div class="success"><b>🎁 1 ID CLAIM SUCCESSFUL ✓</b><br>ठीक है — आपका 1 bonus ID claim हो गया। यह UTR दोबारा claim नहीं कर सकता।'+rows+'</div>';
+    if(d.pending){
+      out.innerHTML='<div class="pending"><b>🎁 Bonus claim request submitted ✓</b><br>Admin approval pending. Approval ke baad 1 bonus ID yahin show hogi.</div>';
+      return;
+    }
+    const rows=(d.items||[]).map((x)=>'<div class="idrow"><b>🎁 Bonus ID:</b> <code>'+esc(x.login_id)+'</code>'+(x.login_password?'<br><b>Password:</b> <code>'+esc(x.login_password)+'</code>':'')+(x.extra_data?'<br>'+esc(x.extra_data):'')+'</div>').join('');
+    out.innerHTML='<div class="success"><b>🎁 1 ID CLAIM SUCCESSFUL ✓</b><br>Bonus ID aur password neeche diya gaya hai. Yeh UTR dobara bonus claim nahi kar sakta.'+rows+'</div>';
   }catch(e){out.innerHTML='<div class="error">'+esc(e.message)+'</div>';}
 }
-
 async function checkUTR(){const u=$('utr').value.trim();if(!/^[A-Za-z0-9]{8,35}$/.test(u)){$('result').innerHTML='<div class="error">Valid UTR / Transaction ID डालें (8–35 letters/digits).</div>';return;}$('result').textContent='Checking…';try{const r=await fetch('/api/order-check/'+encodeURIComponent(u));const d=await r.json();if(!d.found){$('result').innerHTML='<div class="error">Not Found — इस UTR/Payment ID से कोई verified purchase नहीं मिला।</div>';return;}showCheck(d.items,d.order);}catch(e){$('result').innerHTML='<div class="error">'+esc(e.message)+'</div>';}}
 function showCheck(items,order){if(order.status==='rejected'){ $('result').innerHTML='<div class="error"><b>❌ PAYMENT REJECTED</b><br>Is UTR / Transaction ID ko Admin ne reject kar diya hai.<br><small>Payment rejected — ID release nahi hogi.</small></div>';return;} if(order.status!=='approved'&&order.status!=='paid'){ $('result').innerHTML='<div class="pending"><b>Payment Pending Approval</b><br>Payment record mil gaya hai, lekin admin approval abhi pending hai.<br>Order: <code>'+esc(order.order_id)+'</code></div>';return;} const rows=(items||[]).map((x,i)=>'<div class="idrow"><b>ID '+(i+1)+':</b> <code>'+esc(x.login_id)+'</code>'+(x.login_password?'<br><b>Password:</b> <code>'+esc(x.login_password)+'</code>':'')+(x.extra_data?'<br>'+esc(x.extra_data):'')+'</div>').join('');$('result').innerHTML='<div class="success"><b>Verified Purchase</b><br>Order: <code>'+esc(order.order_id)+'</code>'+rows+'</div>';}
 init();
