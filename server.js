@@ -186,6 +186,7 @@ async function normalizeStorePrice(){ try {
   const current=await setting('price_per_id');
   if(!current || !Number.isFinite(Number(current)) || Number(current)<=0){
     await q("INSERT INTO settings(key,value) VALUES ('price_per_id','1') ON CONFLICT(key) DO NOTHING");
+    await q("INSERT INTO settings(key,value) VALUES ('bonus_offer_enabled','true') ON CONFLICT(key) DO NOTHING");
   }
  } catch(e) { console.warn('Price initialization skipped:', e.message); } }
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
@@ -200,7 +201,7 @@ function publicSettings(s, stock=0){
     price: Math.round(basePrice * qty * 100) / 100,
     available: stock >= qty
   }));
-  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim()};
+  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim(), bonusOfferEnabled:s.bonus_offer_enabled!=='false'};
 }
 
 app.post('/api/site-verify', rateLimit(apiHits,60*1000,30), async (req,res)=>{
@@ -259,7 +260,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 });
 
 app.post('/api/admin/settings',auth,async(req,res)=>{
-  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news'];
+  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled'];
   if(req.body.price_per_id!==undefined){
     const price=Number(req.body.price_per_id);
     if(!Number.isFinite(price) || price<=0 || price>100000){
@@ -472,6 +473,28 @@ app.post('/api/claim-bonus/:utr', siteGate, claimRateLimit, async(req,res)=>{
     res.json({ok:true,pending:true,message:'Claim request sent to admin for approval.',orderId:order.order_id,utr:order.utr});
   }catch(e){try{await client.query('ROLLBACK')}catch{};console.error('Claim request error:',e);res.status(500).json({error:'Could not submit claim request'});}
   finally{client.release();}
+});
+
+app.post('/api/admin/manual-bonus-release/:utr',auth,async(req,res)=>{
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const r=await client.query("SELECT * FROM orders WHERE LOWER(utr)=LOWER($1) ORDER BY created_at DESC LIMIT 1 FOR UPDATE",[String(req.params.utr||'').trim()]);
+    const order=r.rows[0];
+    if(!order){await client.query('ROLLBACK');return res.status(404).json({error:'NOT FOUND: UTR not found'});}
+    if(order.package_qty!==10 || (order.status!=='approved' && order.status!=='paid')){await client.query('ROLLBACK');return res.status(400).json({error:'This UTR is not an approved 10 ID purchase'});}
+    if(order.claim_status==='approved' || order.claim_used_at){await client.query('ROLLBACK');return res.status(409).json({error:'This UTR has already used the 1 ID bonus claim'});}
+    if(!order.fulfilled_at || Date.now()>new Date(order.fulfilled_at).getTime()+24*60*60*1000){await client.query('ROLLBACK');return res.status(410).json({error:'24-hour bonus claim window has expired'});}
+    const stock=await client.query("SELECT id FROM inventory WHERE status='available' ORDER BY id ASC LIMIT 1 FOR UPDATE");
+    if(!stock.rows[0]){await client.query('ROLLBACK');return res.status(409).json({error:'Bonus ID is out of stock'});}
+    const inventoryId=stock.rows[0].id;
+    await client.query("UPDATE inventory SET status='sold',sold_order_id=$1 WHERE id=$2",[order.order_id+'-BONUS',inventoryId]);
+    await client.query("INSERT INTO order_items(order_id,inventory_id) VALUES($1,$2)",[order.order_id,inventoryId]);
+    await client.query("UPDATE orders SET claim_used_at=NOW(),claim_status='approved',claim_requested_at=COALESCE(claim_requested_at,NOW()) WHERE order_id=$1",[order.order_id]);
+    const claimed=await client.query('SELECT login_id,login_password,extra_data FROM inventory WHERE id=$1',[inventoryId]);
+    await client.query('COMMIT');
+    res.json({ok:true,utr:order.utr,order_id:order.order_id,bonus:claimed.rows[0]});
+  }catch(e){try{await client.query('ROLLBACK')}catch{};console.error('Manual bonus release error:',e);res.status(500).json({error:'Could not manually release bonus ID'});}finally{client.release();}
 });
 
 app.post('/api/admin/orders/:orderId/claim-approve',auth,async(req,res)=>{

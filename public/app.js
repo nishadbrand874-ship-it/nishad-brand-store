@@ -33,6 +33,7 @@ async function refreshStoreStock(){
     if(!r.ok) return;
     const d=await r.json();
     config=d;
+    const cb=document.querySelector('.claim-box'); if(cb) cb.classList.toggle('hidden', String(d.bonusOfferEnabled||'true')!=='true');
     const sb=$('stockBanner');
     if(sb){
       sb.className='stock-banner '+(Number(d.stock||0)>0?'in':'out');
@@ -109,7 +110,7 @@ function resetTurnstile(){try{if(turnstileWidgetId!==null&&window.turnstile)wind
 async function init(){
   if(!siteVerified){ initSiteGate(); return; }
   try{
-    const r=await fetch('/api/config?ts='+Date.now(),{cache:'no-store'}); config=await r.json(); if(!r.ok) throw new Error(config.error||'Configuration failed');
+    const r=await fetch('/api/config?ts='+Date.now(),{cache:'no-store'}); config=await r.json(); const cb=document.querySelector('.claim-box'); if(cb) cb.classList.toggle('hidden', String(config.bonusOfferEnabled||'true')!=='true'); if(!r.ok) throw new Error(config.error||'Configuration failed');
     $('siteName').textContent=config.siteName||'NISHAD BRAND'; $('logo').src=config.logo||'/logo.png';
     $('wa').href='https://wa.me/'+String(config.whatsapp||'').replace(/\D/g,'');
     const sb=$('stockBanner'); if(sb){ sb.className='stock-banner '+(Number(config.stock||0)>0?'in':'out'); sb.innerHTML=Number(config.stock||0)>0?'✓ STOCK AVAILABLE • '+Number(config.stock)+' ID AVAILABLE':'✕ OUT OF STOCK'; }
