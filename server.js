@@ -91,29 +91,6 @@ const pool = new Pool({
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-// Anonymous storefront visitor tracking. No IP address is stored.
-async function trackStoreVisit(req,res,next){
-  try{
-    if(req.method!=='GET' || req.path!=='/') return next();
-    let visitorId=String(req.cookies?.NB_VISITOR_ID||'').trim();
-    if(!/^[A-Za-z0-9_-]{20,80}$/.test(visitorId)){
-      visitorId=crypto.randomBytes(24).toString('base64url');
-      res.cookie('NB_VISITOR_ID',visitorId,{
-        httpOnly:true,
-        secure:process.env.NODE_ENV==='production',
-        sameSite:'lax',
-        path:'/',
-        maxAge:365*24*60*60*1000
-      });
-    }
-    const day=await q(`SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AS d`);
-    const visitDate=day.rows[0].d;
-    await q('INSERT INTO site_visits(visitor_id,path) VALUES($1,$2)',[visitorId,'/']);
-    await q('INSERT INTO site_unique_visits(visitor_id,visit_date) VALUES($1,$2) ON CONFLICT DO NOTHING',[visitorId,visitDate]);
-  }catch(e){ console.warn('Visitor tracking skipped:',e.message); }
-  next();
-}
-app.use(trackStoreVisit);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve the storefront explicitly at the root URL.
@@ -123,6 +100,7 @@ app.get('/health', (req,res)=>res.json({ok:true,service:'nishad-brand-store'}));
 
 const loginAttempts=new Map();
 const apiHits=new Map();
+const claimHits=new Map();
 function clientIp(req){ return String(req.ip||'unknown').slice(0,100); }
 function rateLimit(map,windowMs,max,code='Too many requests. Please try again later.'){
   return (req,res,next)=>{
@@ -147,7 +125,7 @@ function recordLoginFailure(key){
   else a.count++;
 }
 function clearLoginFailures(key){loginAttempts.delete(key);}
-setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of apiHits) if(now-v.first>60*1000) apiHits.delete(k); },5*60*1000).unref();
+setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of apiHits) if(now-v.first>60*1000) apiHits.delete(k); for(const [k,v] of claimHits) if(now-v.first>10*60*1000) claimHits.delete(k); },5*60*1000).unref();
 
 
 function auth(req,res,next){
@@ -166,29 +144,12 @@ async function migrateOrdersSchema(){
   // Backward-compatible migration for existing databases created before qr_code_id was added.
   // CREATE TABLE IF NOT EXISTS does not modify an already-existing orders table.
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS qr_code_id TEXT');
+  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS claim_used_at TIMESTAMPTZ');
   try {
     await q('CREATE UNIQUE INDEX IF NOT EXISTS orders_qr_code_id_unique ON orders(qr_code_id) WHERE qr_code_id IS NOT NULL');
   } catch (e) {
     console.warn('QR code index migration skipped:', e.message);
   }
-}
-
-async function migrateVisitorSchema(){
-  // Privacy-friendly anonymous visitor analytics: only a random browser ID is stored.
-  await q(`CREATE TABLE IF NOT EXISTS site_visits (
-    id BIGSERIAL PRIMARY KEY,
-    visitor_id TEXT NOT NULL,
-    path TEXT NOT NULL,
-    visited_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await q(`CREATE TABLE IF NOT EXISTS site_unique_visits (
-    visitor_id TEXT NOT NULL,
-    visit_date DATE NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY(visitor_id, visit_date)
-  )`);
-  await q('CREATE INDEX IF NOT EXISTS site_visits_visited_at_idx ON site_visits(visited_at)');
-  await q('CREATE INDEX IF NOT EXISTS site_unique_visits_date_idx ON site_unique_visits(visit_date)');
 }
 
 async function migrateInventoryEncryption(){
@@ -251,17 +212,12 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
   const sold=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='sold'");
   const orders=await q("SELECT order_id,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at FROM orders ORDER BY created_at DESC LIMIT 100");
   const inv=await q("SELECT id,status,sold_order_id,created_at FROM inventory ORDER BY id DESC LIMIT 500");
-  const visitorStats=await q(`SELECT
-    (SELECT COUNT(*)::int FROM site_visits WHERE (visited_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) AS today_visits,
-    (SELECT COUNT(*)::int FROM site_unique_visits WHERE visit_date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) AS today_unique_visitors,
-    (SELECT COUNT(*)::int FROM site_visits) AS total_visits,
-    (SELECT COUNT(*)::int FROM site_unique_visits) AS total_unique_visitors`);
   const today=await q(`SELECT
     (SELECT COUNT(*)::int FROM inventory WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status='sold') AS today_sold_ids,
     (SELECT COUNT(*)::int FROM inventory WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) AS today_ids_added,
     (SELECT COUNT(*)::int FROM orders WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status='rejected') AS today_rejected,
     (SELECT COUNT(*)::int FROM orders WHERE (fulfilled_at AT TIME ZONE 'Asia/Kolkata')::date=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AND status IN ('approved','paid')) AS today_approved`);
-  res.json({settings:s,stock:stock.rows[0].count,sold:sold.rows[0].count,orders:orders.rows,inventory:inv.rows,today:today.rows[0],visitors:visitorStats.rows[0]});
+  res.json({settings:s,stock:stock.rows[0].count,sold:sold.rows[0].count,orders:orders.rows,inventory:inv.rows,today:today.rows[0]});
 });
 
 app.post('/api/admin/settings',auth,async(req,res)=>{
@@ -427,6 +383,46 @@ async function getOrderItems(utr){
   if(order.status==='approved' || order.status==='paid') return {found:true,status:'approved',order:publicOrder,items:await getApprovedItems(order.order_id)};
   return {found:true,status:order.status==='rejected'?'rejected':'pending',order:publicOrder,items:[]};
 }
+function claimRateLimit(req,res,next){
+  const ip=clientIp(req);
+  const now=Date.now();
+  const key=ip+'|claim';
+  const a=claimHits.get(key);
+  if(!a || now-a.first>=10*60*1000){ claimHits.set(key,{first:now,count:1}); return next(); }
+  a.count++;
+  if(a.count>5) return res.status(429).json({error:'Too many claim attempts. Please try again later.'});
+  next();
+}
+app.post('/api/claim-bonus/:utr', claimRateLimit, async(req,res)=>{
+  const utr=String(req.params.utr||'').trim().replace(/\s+/g,'');
+  if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'});
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const r=await client.query('SELECT * FROM orders WHERE LOWER(utr)=LOWER($1) LIMIT 1 FOR UPDATE',[utr]);
+    if(!r.rows[0]){await client.query('ROLLBACK');return res.status(404).json({error:'This UTR was not found'});}
+    const order=r.rows[0];
+    if(order.package_qty!==10){await client.query('ROLLBACK');return res.status(400).json({error:'1 ID claim is available only for a 10 ID purchase'});}
+    if(order.status!=='approved' && order.status!=='paid'){await client.query('ROLLBACK');return res.status(400).json({error:'Payment must be approved before claiming the bonus ID'});}
+    const originalItems=await client.query('SELECT COUNT(*)::int AS count FROM order_items WHERE order_id=$1',[order.order_id]);
+    if(originalItems.rows[0].count < 10){await client.query('ROLLBACK');return res.status(400).json({error:'This order is not eligible for the 10 ID bonus claim'});}
+    if(order.claim_used_at){await client.query('ROLLBACK');return res.status(409).json({error:'This UTR has already used the 1 ID claim'});}
+    if(!order.fulfilled_at){await client.query('ROLLBACK');return res.status(400).json({error:'Claim window is not available'});}
+    const deadline=new Date(order.fulfilled_at).getTime()+24*60*60*1000;
+    if(Date.now()>deadline){await client.query('ROLLBACK');return res.status(410).json({error:'24-hour claim window has expired'});}
+    const item=await client.query("SELECT id FROM inventory WHERE status='available' ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT 1");
+    if(!item.rows[0]){await client.query('ROLLBACK');return res.status(409).json({error:'Bonus ID is temporarily out of stock. Please try again before the 24-hour claim window expires.'});}
+    const inventoryId=item.rows[0].id;
+    await client.query("UPDATE inventory SET status='sold',sold_order_id=$1,reserved_order_id=NULL WHERE id=$2",[order.order_id,inventoryId]);
+    await client.query('INSERT INTO order_items(order_id,inventory_id) VALUES($1,$2)',[order.order_id,inventoryId]);
+    await client.query('UPDATE orders SET claim_used_at=NOW() WHERE order_id=$1',[order.order_id]);
+    await client.query('COMMIT');
+    const claimed=await q('SELECT i.login_id,i.login_password,i.extra_data FROM inventory i WHERE i.id=$1',[inventoryId]);
+    const x=claimed.rows[0];
+    res.json({ok:true,message:'Bonus 1 ID claimed successfully',orderId:order.order_id,claimUsedAt:new Date().toISOString(),items:[{login_id:decryptSecret(x.login_id),login_password:decryptSecret(x.login_password),extra_data:decryptSecret(x.extra_data)}]});
+  }catch(e){try{await client.query('ROLLBACK')}catch{};console.error('Bonus claim error:',e);res.status(500).json({error:'Could not claim bonus ID'});}finally{client.release();}
+});
+
 app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
 
 app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile(path.join(__dirname,'public','admin.html')); });
@@ -435,7 +431,6 @@ app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile
   try{
     await q(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
     await migrateOrdersSchema();
-    await migrateVisitorSchema();
     await migrateInventoryEncryption();
     await normalizeStorePrice();
     app.listen(PORT,()=>console.log(`NISHAD BRAND running on ${PORT}`));

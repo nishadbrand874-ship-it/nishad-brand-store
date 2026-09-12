@@ -147,3 +147,12 @@ Admin Panel हर 3 सेकंड में payment requests check करत�
 
 ### 🔄 Store Stock Auto Refresh
 NISHAD BRAND storefront हर 3 सेकंड में `/api/config` से stock/price refresh करता है। ID बिकने पर उपलब्ध stock घटेगा और admin नई ID upload करने पर बढ़ेगा, बिना page manually refresh किए।
+
+
+## 10 ID Bonus Claim — Security
+- Bonus claim requires the exact UTR used for an approved 10-ID order.
+- One UTR can claim only once; `claim_used_at` is transactionally locked.
+- Claim deadline is server-side: 24 hours from `fulfilled_at`.
+- Claim endpoint is rate-limited to 5 attempts per 10 minutes per client IP.
+- Claim inventory allocation uses a database transaction with row locking, preventing double allocation during concurrent requests.
+- The order must have at least 10 original `order_items` before the bonus can be claimed.

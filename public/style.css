@@ -451,3 +451,6 @@ body:after{width:360px;height:360px;right:-150px;bottom:5%;background:radial-gra
   .check{padding:11px!important;margin-top:14px!important;border-radius:14px!important;gap:9px}.section-icon{width:34px;height:34px;border-radius:10px}.check p{font-size:10px;margin:0 0 7px}.checkrow{gap:7px!important}.checkrow input{padding:9px!important;border-radius:9px}.checkrow button{padding:9px 11px!important}
   .whatsapp{width:46px!important;height:46px!important;right:9px!important;bottom:9px!important}.site-footer{font-size:9px!important;padding-bottom:20px!important}
 }
+
+.claim-box{margin-top:18px;padding:16px;border-radius:16px;border:1px solid rgba(20,184,166,.35);background:rgba(20,184,166,.08)}
+.claim-box h3{margin:0 0 6px}.claim-box p{margin:0 0 12px}.claim-box .checkrow{margin-top:10px}

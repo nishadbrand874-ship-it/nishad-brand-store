@@ -43,3 +43,6 @@ body{background:radial-gradient(circle at 10% 0%,rgba(59,130,246,.28),transparen
 @media(max-width:520px){.stats{grid-template-columns:1fr 1fr;gap:9px}.stat{min-height:92px;padding:12px}.stat b{font-size:24px}.stat small{font-size:9px}.login-panel{padding:22px!important}.login-brand img{width:56px;height:56px}.login-brand b{font-size:18px}}
 
 .secure-note{margin:12px 0;padding:10px 12px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;font-size:13px;font-weight:700;color:#166534}
+
+.top-actions{display:flex;gap:8px;align-items:center}.voice-status{text-align:center;font-size:12px;padding:7px 12px;opacity:.9;background:rgba(0,0,0,.12)}
+@media(max-width:640px){.top-actions{gap:5px}.top-actions .menu-btn{font-size:11px;padding:8px 9px}.voice-status{font-size:11px}}
