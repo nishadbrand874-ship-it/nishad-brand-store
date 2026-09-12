@@ -186,9 +186,10 @@ async function normalizeStorePrice(){ try {
   const current=await setting('price_per_id');
   if(!current || !Number.isFinite(Number(current)) || Number(current)<=0){
     await q("INSERT INTO settings(key,value) VALUES ('price_per_id','1') ON CONFLICT(key) DO NOTHING");
-    await q("INSERT INTO settings(key,value) VALUES ('bonus_offer_enabled','true') ON CONFLICT(key) DO NOTHING");
   }
- } catch(e) { console.warn('Price initialization skipped:', e.message); } }
+  await q("INSERT INTO settings(key,value) VALUES ('bonus_offer_enabled','true') ON CONFLICT(key) DO NOTHING");
+  await q("INSERT INTO settings(key,value) VALUES ('bonus_purchase_qty','10') ON CONFLICT(key) DO NOTHING");
+ } catch(e) { console.warn('Price/bonus initialization skipped:', e.message); } }
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
 async function settings(){ const r=await q('SELECT key,value FROM settings'); return Object.fromEntries(r.rows.map(x=>[x.key,x.value])); }
 function publicSettings(s, stock=0){
@@ -201,7 +202,8 @@ function publicSettings(s, stock=0){
     price: Math.round(basePrice * qty * 100) / 100,
     available: stock >= qty
   }));
-  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim(), bonusOfferEnabled:s.bonus_offer_enabled!=='false'};
+  const bonusPurchaseQty = Math.max(1, Math.min(100000, parseInt(s.bonus_purchase_qty,10) || 10));
+  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim(), bonusOfferEnabled:s.bonus_offer_enabled!=='false', bonusPurchaseQty};
 }
 
 app.post('/api/site-verify', rateLimit(apiHits,60*1000,30), async (req,res)=>{
@@ -260,7 +262,14 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 });
 
 app.post('/api/admin/settings',auth,async(req,res)=>{
-  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled'];
+  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled','bonus_purchase_qty'];
+  if(req.body.bonus_purchase_qty!==undefined){
+    const qty=Number(req.body.bonus_purchase_qty);
+    if(!Number.isInteger(qty) || qty<1 || qty>100000){
+      return res.status(400).json({error:'Invalid bonus purchase quantity'});
+    }
+    req.body.bonus_purchase_qty=String(qty);
+  }
   if(req.body.price_per_id!==undefined){
     const price=Number(req.body.price_per_id);
     if(!Number.isFinite(price) || price<=0 || price>100000){
@@ -455,10 +464,13 @@ app.post('/api/claim-bonus/:utr', siteGate, claimRateLimit, async(req,res)=>{
     const r=await client.query('SELECT * FROM orders WHERE LOWER(utr)=LOWER($1) LIMIT 1 FOR UPDATE',[utr]);
     if(!r.rows[0]){await client.query('ROLLBACK');return res.status(404).json({error:'NOT FOUND: This UTR was not found'});}
     const order=r.rows[0];
-    if(order.package_qty!==10){await client.query('ROLLBACK');return res.status(400).json({error:'NOT FOUND: This UTR is not linked to a 10 ID purchase'});}
+    const bonusQty=Math.max(1,Math.min(100000,parseInt(await setting('bonus_purchase_qty'),10)||10));
+    const bonusEnabled=(await setting('bonus_offer_enabled'))!=='false';
+    if(!bonusEnabled){await client.query('ROLLBACK');return res.status(403).json({error:'Bonus offer is currently OFF'});}
+    if(order.package_qty!==bonusQty){await client.query('ROLLBACK');return res.status(400).json({error:'NOT FOUND: This UTR is not linked to the required bonus-eligible purchase'});}
     if(order.status!=='approved' && order.status!=='paid'){await client.query('ROLLBACK');return res.status(400).json({error:'Payment must be approved before claiming the bonus ID'});}
     const originalItems=await client.query('SELECT COUNT(*)::int AS count FROM order_items WHERE order_id=$1',[order.order_id]);
-    if(originalItems.rows[0].count < 10){await client.query('ROLLBACK');return res.status(400).json({error:'NOT FOUND: This order is not eligible for the 10 ID bonus claim'});}
+    if(originalItems.rows[0].count < bonusQty){await client.query('ROLLBACK');return res.status(400).json({error:'NOT FOUND: This order is not eligible for the bonus claim'});}
     if(order.claim_status==='approved' || order.claim_used_at){await client.query('ROLLBACK');return res.status(409).json({error:'This UTR has already used the 1 ID claim'});}
     if(order.claim_status==='pending' || order.claim_requested_at){
       await client.query('ROLLBACK');
@@ -482,7 +494,7 @@ app.post('/api/admin/manual-bonus-release/:utr',auth,async(req,res)=>{
     const r=await client.query("SELECT * FROM orders WHERE LOWER(utr)=LOWER($1) ORDER BY created_at DESC LIMIT 1 FOR UPDATE",[String(req.params.utr||'').trim()]);
     const order=r.rows[0];
     if(!order){await client.query('ROLLBACK');return res.status(404).json({error:'NOT FOUND: UTR not found'});}
-    if(order.package_qty!==10 || (order.status!=='approved' && order.status!=='paid')){await client.query('ROLLBACK');return res.status(400).json({error:'This UTR is not an approved 10 ID purchase'});}
+    const bonusQty=Math.max(1,Math.min(100000,parseInt(await setting('bonus_purchase_qty'),10)||10)); if(order.package_qty!==bonusQty || (order.status!=='approved' && order.status!=='paid')){await client.query('ROLLBACK');return res.status(400).json({error:'This UTR is not an approved bonus-eligible purchase'});}
     if(order.claim_status==='approved' || order.claim_used_at){await client.query('ROLLBACK');return res.status(409).json({error:'This UTR has already used the 1 ID bonus claim'});}
     if(!order.fulfilled_at || Date.now()>new Date(order.fulfilled_at).getTime()+24*60*60*1000){await client.query('ROLLBACK');return res.status(410).json({error:'24-hour bonus claim window has expired'});}
     const stock=await client.query("SELECT id FROM inventory WHERE status='available' ORDER BY id ASC LIMIT 1 FOR UPDATE");
@@ -504,7 +516,7 @@ app.post('/api/admin/orders/:orderId/claim-approve',auth,async(req,res)=>{
     const r=await client.query('SELECT * FROM orders WHERE order_id=$1 FOR UPDATE',[req.params.orderId]);
     if(!r.rows[0]){await client.query('ROLLBACK');return res.status(404).json({error:'Order not found'});}
     const order=r.rows[0];
-    if(order.package_qty!==10 || (order.status!=='approved' && order.status!=='paid')){await client.query('ROLLBACK');return res.status(400).json({error:'Only an approved 10 ID purchase can receive the bonus'});}
+    const bonusQty=Math.max(1,Math.min(100000,parseInt(await setting('bonus_purchase_qty'),10)||10)); if(order.package_qty!==bonusQty || (order.status!=='approved' && order.status!=='paid')){await client.query('ROLLBACK');return res.status(400).json({error:'Only an approved bonus-eligible purchase can receive the bonus'});}
     if(order.claim_status==='approved' || order.claim_used_at){await client.query('ROLLBACK');return res.json({ok:true,already:true});}
     if(order.claim_status!=='pending'){await client.query('ROLLBACK');return res.status(400).json({error:'No pending claim request'});}
     if(!order.fulfilled_at || Date.now()>new Date(order.fulfilled_at).getTime()+24*60*60*1000){await client.query('ROLLBACK');return res.status(410).json({error:'24-hour claim window has expired'});}

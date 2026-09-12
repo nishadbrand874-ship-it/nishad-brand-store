@@ -107,10 +107,16 @@ function getTurnstileToken(){
 }
 function resetTurnstile(){try{if(turnstileWidgetId!==null&&window.turnstile)window.turnstile.reset(turnstileWidgetId);}catch{}}
 
+function updateBonusCopy(){
+  const qty=Math.max(1,Math.min(100000,parseInt(config?.bonusPurchaseQty,10)||10));
+  const title=$('claimTitle'), desc=$('claimDescription');
+  if(title) title.textContent='🎁 '+qty+' ID Purchase Bonus';
+  if(desc) desc.innerHTML=qty+' ID खरीदने पर उसी UTR से <b>1 extra ID claim</b> करें। Claim केवल <b>1 बार</b> और payment approval के <b>24 घंटे के अंदर</b> होगा।';
+}
 async function init(){
   if(!siteVerified){ initSiteGate(); return; }
   try{
-    const r=await fetch('/api/config?ts='+Date.now(),{cache:'no-store'}); config=await r.json(); const cb=document.querySelector('.claim-box'); if(cb) cb.classList.toggle('hidden', String(config.bonusOfferEnabled||'true')!=='true'); if(!r.ok) throw new Error(config.error||'Configuration failed');
+    const r=await fetch('/api/config?ts='+Date.now(),{cache:'no-store'}); config=await r.json(); updateBonusCopy(); const cb=document.querySelector('.claim-box'); if(cb) cb.classList.toggle('hidden', String(config.bonusOfferEnabled||'true')!=='true'); if(!r.ok) throw new Error(config.error||'Configuration failed');
     $('siteName').textContent=config.siteName||'NISHAD BRAND'; $('logo').src=config.logo||'/logo.png';
     $('wa').href='https://wa.me/'+String(config.whatsapp||'').replace(/\D/g,'');
     const sb=$('stockBanner'); if(sb){ sb.className='stock-banner '+(Number(config.stock||0)>0?'in':'out'); sb.innerHTML=Number(config.stock||0)>0?'✓ STOCK AVAILABLE • '+Number(config.stock)+' ID AVAILABLE':'✕ OUT OF STOCK'; }
