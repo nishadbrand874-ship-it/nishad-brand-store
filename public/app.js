@@ -139,7 +139,7 @@ async function startQrPayment(){
   try{
     const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qty:selected.qty,name:'',phone:''})});
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'QR create failed');
-    $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').href=d.upiLink||'#'; $('upiOpen').classList.toggle('hidden',!d.upiLink); $('payText').textContent=d.quantity+' ID — ₹'+money(Number(d.amount!=null?d.amount/100:selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.amount||0)/100)+'</b><br>QR scan karke payment karein. Payment ke baad UTR / Transaction ID neeche submit karein. Admin approval ke baad ID release hogi.'; $('utrBox').classList.remove('hidden'); setTimeout(initTurnstile,0);
+    $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').href=d.upiLink||'#'; $('upiOpen').classList.toggle('hidden',!d.upiLink); $('payText').textContent=d.quantity+' ID — ₹'+money(Number(d.amount!=null?d.amount/100:selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.amount||0)/100)+'</b><br>QR scan karke payment karein. Payment ke baad UTR / Transaction ID neeche submit karein. Payment approval ke baad ID release hogi.'; $('utrBox').classList.remove('hidden'); setTimeout(initTurnstile,0);
     startCountdown(Number(d.expiresAt||Date.now()+300000));
     window.currentOrderId=d.orderId; window.currentOrderToken=d.orderToken||''; pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000); await checkQrStatus(d.orderId);
   }catch(e){$('payStatus').innerHTML='<div class="error">'+esc(e.message)+'</div>';}
@@ -171,7 +171,7 @@ async function checkQrStatus(orderId){
 }
 function startCountdown(expiresAt){clearInterval(countdownTimer);const tick=()=>{const left=Math.max(0,expiresAt-Date.now());const sec=Math.ceil(left/1000);if(sec<=0){$('timer').textContent='00:00';clearInterval(countdownTimer);return;}const m=String(Math.floor(sec/60)).padStart(2,'0'),s=String(sec%60).padStart(2,'0');$('timer').textContent=m+':'+s;};tick();countdownTimer=setInterval(tick,1000);}
 function stopPolling(){if(pollTimer)clearInterval(pollTimer);pollTimer=null;if(countdownTimer)clearInterval(countdownTimer);countdownTimer=null;}
-function showIDs(items,order){const rows=(items||[]).map((x,i)=>'<div class="idrow"><b>ID '+(i+1)+':</b> <code>'+esc(x.login_id)+'</code>'+(x.login_password?'<br><b>Password:</b> <code>'+esc(x.login_password)+'</code>':'')+(x.extra_data?'<br>'+esc(x.extra_data):'')+'</div>').join('');$('payStatus').innerHTML='<div class="success"><b>Payment verified successfully ✓</b><br>Admin approval complete. Your ID details are below.'+rows+'</div>';}
+function showIDs(items,order){const rows=(items||[]).map((x,i)=>'<div class="idrow"><b>ID '+(i+1)+':</b> <code>'+esc(x.login_id)+'</code>'+(x.login_password?'<br><b>Password:</b> <code>'+esc(x.login_password)+'</code>':'')+(x.extra_data?'<br>'+esc(x.extra_data):'')+'</div>').join('');$('payStatus').innerHTML='<div class="success"><b>Payment verified successfully ✓</b><br>Payment approval complete. Your ID details are below.'+rows+'</div>';}
 
 async function claimBonus(){
   const el=$('claimUtr'), out=$('claimResult');
@@ -182,10 +182,6 @@ async function claimBonus(){
     const r=await fetch('/api/claim-bonus/'+encodeURIComponent(utr),{method:'POST',headers:{'Content-Type':'application/json'}});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Claim failed');
-    if(d.pending){
-      out.innerHTML='<div class="pending"><b>🎁 Bonus claim request submitted ✓</b><br>Admin approval pending. Approval ke baad 1 bonus ID yahin show hogi.</div>';
-      return;
-    }
     const rows=(d.items||[]).map((x)=>'<div class="idrow"><b>🎁 Bonus ID:</b> <code>'+esc(x.login_id)+'</code>'+(x.login_password?'<br><b>Password:</b> <code>'+esc(x.login_password)+'</code>':'')+(x.extra_data?'<br>'+esc(x.extra_data):'')+'</div>').join('');
     out.innerHTML='<div class="success"><b>🎁 1 ID CLAIM SUCCESSFUL ✓</b><br>Bonus ID aur password neeche diya gaya hai. Yeh UTR dobara bonus claim nahi kar sakta.'+rows+'</div>';
   }catch(e){out.innerHTML='<div class="error">'+esc(e.message)+'</div>';}
