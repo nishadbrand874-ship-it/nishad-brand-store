@@ -310,8 +310,22 @@ function verifyOrderToken(order,token){
   return expected.length===actual.length && crypto.timingSafeEqual(expected,actual);
 }
 
+async function verifyTurnstile(token, req){
+  const secret=String(process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY||'').trim();
+  if(!secret) return {ok:false, reason:'Cloudflare Turnstile is not configured'};
+  if(!token || String(token).length<10) return {ok:false, reason:'Cloudflare verification required'};
+  try{
+    const body=new URLSearchParams({secret,response:String(token),remoteip:clientIp(req)});
+    const r=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
+    const d=await r.json();
+    return d?.success ? {ok:true} : {ok:false, reason:'Cloudflare verification failed'};
+  }catch(e){ console.error('Turnstile verify error:',e); return {ok:false, reason:'Cloudflare verification unavailable'}; }
+}
+
 app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{
   try{
+    const cf=await verifyTurnstile(req.body?.turnstileToken,req);
+    if(!cf.ok) return res.status(403).json({error:cf.reason});
     const orderId=String(req.params.orderId||'').trim();
     const orderToken=String(req.headers['x-order-token']||'').trim();
     const utr=String(req.body?.utr||'').trim().replace(/\s+/g,'');

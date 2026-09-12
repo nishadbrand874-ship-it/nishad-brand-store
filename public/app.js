@@ -1,5 +1,5 @@
 'use strict';
-let config=null, selected=null, pollTimer=null, countdownTimer=null, storeRefreshTimer=null, storeRefreshBusy=false;
+let config=null, selected=null, pollTimer=null, countdownTimer=null, storeRefreshTimer=null, storeRefreshBusy=false, turnstileWidgetId=null;
 const $=id=>document.getElementById(id);
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 function money(n){return Number(n||0).toLocaleString('en-IN');}
@@ -56,6 +56,19 @@ function startStoreAutoRefresh(){
   if(storeRefreshTimer) return;
   storeRefreshTimer=setInterval(refreshStoreStock,3000);
 }
+function initTurnstile(){
+  const box=$('turnstileBox');
+  if(!box || !config?.turnstileSiteKey || !window.turnstile) return;
+  try{
+    if(turnstileWidgetId!==null) window.turnstile.reset(turnstileWidgetId);
+    turnstileWidgetId=window.turnstile.render(box,{sitekey:config.turnstileSiteKey,theme:'dark',callback:()=>{},'expired-callback':()=>{},'error-callback':()=>{}});
+  }catch(e){console.warn('Turnstile init:',e);}
+}
+function getTurnstileToken(){
+  try{return (turnstileWidgetId!==null && window.turnstile)?String(window.turnstile.getResponse(turnstileWidgetId)||''):'';}catch{return '';}
+}
+function resetTurnstile(){try{if(turnstileWidgetId!==null&&window.turnstile)window.turnstile.reset(turnstileWidgetId);}catch{}}
+
 async function init(){
   try{
     const r=await fetch('/api/config?ts='+Date.now(),{cache:'no-store'}); config=await r.json(); if(!r.ok) throw new Error(config.error||'Configuration failed');
@@ -93,13 +106,14 @@ async function submitUTR(){
   if(!orderId){$('utrMsg').innerHTML='<div class="error">Order session नहीं मिला. Buy Now फिर से करें.</div>';return;}
   $('utrBtn').disabled=true;$('utrMsg').textContent='Submitting…';
   try{
-    const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':String(window.currentOrderToken||'')},body:JSON.stringify({utr})});
+    const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':String(window.currentOrderToken||'')},body:JSON.stringify({utr,turnstileToken:getTurnstileToken()})});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'UTR submit failed');
     $('utrMsg').innerHTML='<div class="pending"><b>Payment submitted.</b><br>Admin approval pending. Approval ke baad ID yahin milegi.</div>';
     $('utrBtn').disabled=true;
+    resetTurnstile();
     await checkQrStatus(orderId);
-  }catch(e){$('utrMsg').innerHTML='<div class="error">'+esc(e.message)+'</div>';$('utrBtn').disabled=false;}
+  }catch(e){$('utrMsg').innerHTML='<div class="error">'+esc(e.message)+'</div>';$('utrBtn').disabled=false;resetTurnstile();}
 }
 async function checkQrStatus(orderId){
   try{
