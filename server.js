@@ -472,11 +472,8 @@ app.post('/api/claim-bonus/:utr', siteGate, claimRateLimit, async(req,res)=>{
     const originalItems=await client.query('SELECT COUNT(*)::int AS count FROM order_items WHERE order_id=$1',[order.order_id]);
     if(originalItems.rows[0].count < bonusQty){await client.query('ROLLBACK');return res.status(400).json({error:'NOT FOUND: This order is not eligible for the bonus claim'});}
     if(order.claim_status==='approved' || order.claim_used_at){
-      const claimed=await client.query('SELECT i.login_id,i.login_password,i.extra_data FROM order_items oi JOIN inventory i ON i.id=oi.inventory_id WHERE oi.order_id=$1 ORDER BY i.id DESC LIMIT 1',[order.order_id]);
       await client.query('ROLLBACK');
-      if(!claimed.rows[0]) return res.status(409).json({error:'This UTR has already used the 1 ID claim'});
-      const x=claimed.rows[0];
-      return res.json({ok:true,approved:true,already:true,utr:order.utr,orderId:order.order_id,items:[{login_id:decryptSecret(x.login_id),login_password:decryptSecret(x.login_password),extra_data:decryptSecret(x.extra_data)}],message:'Bonus ID already released for this UTR.'});
+      return res.status(409).json({error:'ALREADY CLAIMED: Is UTR se 1 bonus ID pehle hi claim ho chuki hai.'});
     }
     if(order.claim_status==='rejected'){await client.query('ROLLBACK');return res.status(409).json({error:'This UTR cannot be claimed again'});}
     if(!order.fulfilled_at){await client.query('ROLLBACK');return res.status(400).json({error:'Claim window is not available'});}

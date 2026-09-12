@@ -204,7 +204,8 @@ checkForNewPaymentRequests(d.orders||[]);
 $('dash').innerHTML=renderDashboardStats(d);
 const s=d.settings||{};window.bonusOfferEnabled=s.bonus_offer_enabled!=='false';$('settings').innerHTML='<div class="gateway-tip">📱 <b>UPI QR:</b> हर order में खरीदी गई ID की संख्या के हिसाब से exact amount वाला UPI QR अपने आप बनेगा. Payment के बाद customer UTR submit करेगा और आप manually approve करेंगे.</div><div class="formgrid">'+[['site_name','Site Name'],['whatsapp_number','WhatsApp Number'],['price_per_id','Price per ID'],['upi_vpa','UPI ID / VPA'],['upi_name','UPI Payee Name']].map(([k,l])=>'<label>'+l+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>').join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows="4" placeholder="Store news यहाँ लिखें...">'+esc(s.news||'')+'</textarea></label>';
 $('ordersTable').innerHTML=ordersTable(d.orders||[]);
-$('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);}
+$('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);
+$('bonusManage').innerHTML=renderBonusManagement(s);}
 function ordersTable(rows){
   // Payment Approvals में केवल UTR/payment submit किए हुए orders दिखाएँ.
   // WAITING PAYMENT (created) orders user के order-check flow में रहेंगे,
@@ -212,6 +213,13 @@ function ordersTable(rows){
   rows=(rows||[]).filter(r=>r.status!=='created');
   if(!rows.length)return '<div class="empty">No payment requests yet.</div>';
   return '<div class="table-wrap"><table><thead><tr><th>Order</th><th>Amount</th><th>UTR / Payment</th><th>Status</th><th>Created</th><th>Action</th></tr></thead><tbody>'+rows.map(r=>'<tr><td><b>'+esc(r.order_id)+'</b><br>'+esc(r.package_qty)+' ID</td><td>₹'+(Number(r.amount_paise||0)/100).toLocaleString('en-IN')+'</td><td><code>'+esc(r.utr||r.payment_id||'—')+'</code></td><td>'+statusBadge(r.status)+'</td><td>'+esc(new Date(r.created_at).toLocaleString('en-IN'))+'</td><td>'+(r.status==='payment_received'?'<button class="approve" onclick="approve(\''+esc(r.order_id)+'\')">✓ APPROVE & RELEASE ID</button><button class="reject" onclick="rejectOrder(\''+esc(r.order_id)+'\')">Reject</button>':r.status==='approved'||r.status==='paid'?'<span class="oktext">ID released</span>':r.status==='rejected'?'<span class="oktext">Rejected</span>':'—')+'</td></tr>').join('')+'</tbody></table></div>';
+}
+function renderBonusManagement(s){
+  const enabled=s.bonus_offer_enabled!=='false';
+  const qty=Math.max(1,Math.min(100000,parseInt(s.bonus_purchase_qty,10)||10));
+  return '<div class="bonus-control"><div><b>🎁 '+qty+' ID Purchase Bonus</b><span>Customer bonus offer ON/OFF</span></div><button id="bonusToggle" class="bonus-toggle '+(enabled?'on':'off')+'" onclick="toggleBonusOffer()">'+(enabled?'🟢 BONUS OFFER ON':'🔴 BONUS OFFER OFF')+'</button></div>'
+    +'<div class="bonus-settings-box"><h3>⚙ Bonus Eligibility Setting</h3><p>Admin manually तय करें कि कितनी IDs खरीदने पर 1 extra ID bonus मिलेगा.</p><div class="checkrow"><label>Purchase Quantity<input id="bonusPurchaseQty" type="number" min="1" max="100000" value="'+qty+'"></label><button class="primary" onclick="saveBonusPurchaseQty()">💾 SAVE BONUS SETTING</button></div><div class="bonus-preview">Current: '+qty+' ID खरीदने पर 1 extra ID bonus</div></div>'
+    +'<div class="manual-bonus-box"><h3>🛠 Manual Bonus Claim</h3><p>Approved bonus-eligible UTR डालकर Admin manually 1 bonus ID release कर सकता है. Bonus पर अलग Admin approval नहीं होगा.</p><div class="checkrow"><label>UTR / Transaction ID<input id="manualBonusUtr" placeholder="UTR डालें"></label><button class="primary" onclick="manualBonusRelease()">🎁 RELEASE 1 BONUS ID</button></div><div id="manualBonusResult"></div></div>';
 }
 function inventoryTable(rows){if(!rows.length)return '<div class="empty">Inventory empty.</div>';return '<div class="secure-note">🔐 ID/password values are stored securely on the server and are not exposed in the browser inventory list.</div><div class="table-wrap"><table><thead><tr><th>Record</th><th>Status</th><th>Order</th><th>Added</th><th></th></tr></thead><tbody>'+rows.map(r=>'<tr><td>#'+Number(r.id)+'</td><td>'+statusBadge(r.status)+'</td><td>'+esc(r.sold_order_id||'—')+'</td><td>'+esc(new Date(r.created_at).toLocaleString('en-IN'))+'</td><td>'+ (r.status==='available'?'<button class="reject" onclick="deleteID('+Number(r.id)+')">Delete</button>':'')+'</td></tr>').join('')+'</tbody></table></div>';}
 
