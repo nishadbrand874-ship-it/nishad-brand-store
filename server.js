@@ -12,19 +12,6 @@ const QRCode = require('qrcode');
 
 const app = express();
 app.set('trust proxy', 1);
-
-// Keep the Cloudflare site-wide verification on the verified custom domain.
-// Render's service hostname is redirected before the Turnstile gate loads,
-// because the Turnstile widget is authorized for nishadbrand.online.
-app.use((req,res,next)=>{
-  if (process.env.NODE_ENV === 'production') {
-    const host=String(req.headers.host||'').split(':')[0].toLowerCase();
-    if (host==='nishad-brand-store.onrender.com' && req.path!=='/health') {
-      return res.redirect(308, 'https://nishadbrand.online'+String(req.originalUrl||'/'));
-    }
-  }
-  next();
-});
 const ADMIN_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-nishad_admin' : 'nishad_admin';
 const CF_GATE_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-nishad_cf_verified' : 'nishad_cf_verified';
 const upload = multer({
@@ -102,9 +89,10 @@ const pool = new Pool({
   ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
   connectionTimeoutMillis: 10000
 });
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '256kb', strict: true }));
+app.use(express.urlencoded({ extended: true, limit: '128kb', parameterLimit: 100 }));
 app.use(cookieParser());
+app.use((req,res,next)=>{ if(req.path.startsWith('/api/')) res.set('Cache-Control','no-store'); next(); });
 
 // Serve the storefront with the Turnstile Site Key embedded for the first-load gate.
 app.get('/', (req,res)=>{
@@ -120,8 +108,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/health', (req,res)=>res.json({ok:true,service:'nishad-brand-store'}));
 
 const loginAttempts=new Map();
+const loginIpAttempts=new Map();
 const apiHits=new Map();
 const claimHits=new Map();
+const adminMutationHits=new Map();
 function clientIp(req){ return String(req.ip||'unknown').slice(0,100); }
 function rateLimit(map,windowMs,max,code='Too many requests. Please try again later.'){
   return (req,res,next)=>{
@@ -136,17 +126,21 @@ function loginRateLimit(req,res,next){
   const ip=clientIp(req);
   const username=String(req.body?.username||'').slice(0,120).toLowerCase();
   const key=ip+'|'+username;
-  const now=Date.now(); const a=loginAttempts.get(key);
+  const now=Date.now();
+  const ipA=loginIpAttempts.get(ip);
+  if(ipA && now-ipA.first<10*60*1000 && ipA.count>=20) return res.status(429).json({error:'Too many login attempts. Try again later.'});
+  const a=loginAttempts.get(key);
   if(a && now-a.first<10*60*1000 && a.count>=8) return res.status(429).json({error:'Too many login attempts. Try again later.'});
-  req._loginKey=key; next();
+  req._loginKey=key; req._loginIp=ip; next();
 }
-function recordLoginFailure(key){
+function recordLoginFailure(key,ip){
   const now=Date.now(); const a=loginAttempts.get(key);
   if(!a || now-a.first>=10*60*1000) loginAttempts.set(key,{first:now,count:1});
   else a.count++;
+  if(ip){ const b=loginIpAttempts.get(ip); if(!b || now-b.first>=10*60*1000) loginIpAttempts.set(ip,{first:now,count:1}); else b.count++; }
 }
-function clearLoginFailures(key){loginAttempts.delete(key);}
-setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of apiHits) if(now-v.first>60*1000) apiHits.delete(k); for(const [k,v] of claimHits) if(now-v.first>10*60*1000) claimHits.delete(k); },5*60*1000).unref();
+function clearLoginFailures(key,ip){loginAttempts.delete(key); if(ip) loginIpAttempts.delete(ip);}
+setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of loginIpAttempts) if(now-v.first>10*60*1000) loginIpAttempts.delete(k); for(const [k,v] of apiHits) if(now-v.first>60*1000) apiHits.delete(k); for(const [k,v] of claimHits) if(now-v.first>10*60*1000) claimHits.delete(k); for(const [k,v] of adminMutationHits) if(now-v.first>60*1000) adminMutationHits.delete(k); },5*60*1000).unref();
 
 
 function siteGate(req,res,next){
@@ -159,6 +153,23 @@ function siteGate(req,res,next){
   } catch { res.status(403).json({error:'Cloudflare verification required'}); }
 }
 function signSiteGateToken(){ return jwt.sign({type:'cloudflare_gate',jti:crypto.randomBytes(16).toString('hex')}, process.env.JWT_SECRET, {expiresIn:'12h'}); }
+
+function sameOrigin(req){
+  const origin=String(req.get('origin')||'').trim();
+  const referer=String(req.get('referer')||'').trim();
+  const host=String(req.get('host')||'').toLowerCase();
+  if(origin){ try { return new URL(origin).host.toLowerCase()===host; } catch { return false; } }
+  if(referer){ try { return new URL(referer).host.toLowerCase()===host; } catch { return false; } }
+  return false;
+}
+function adminMutationGuard(req,res,next){
+  if(!sameOrigin(req)) return res.status(403).json({error:'Invalid request origin'});
+  const ip=clientIp(req), now=Date.now(), a=adminMutationHits.get(ip);
+  if(!a || now-a.first>=60*1000){ adminMutationHits.set(ip,{first:now,count:1}); return next(); }
+  a.count++;
+  if(a.count>60) return res.status(429).json({error:'Too many admin requests. Please try again later.'});
+  next();
+}
 
 function auth(req,res,next){
   try {
@@ -251,12 +262,12 @@ app.post('/api/admin/login', loginRateLimit, async (req,res)=>{
   const okUser=username===process.env.ADMIN_USERNAME;
   const configured=process.env.ADMIN_PASSWORD||'';
   const okPass=configured.startsWith('$2') ? await bcrypt.compare(password||'',configured) : password===configured;
-  if(!okUser || !okPass){ recordLoginFailure(req._loginKey); return res.status(401).json({error:'Invalid login'}); }
-  clearLoginFailures(req._loginKey);
+  if(!okUser || !okPass){ recordLoginFailure(req._loginKey,req._loginIp); return res.status(401).json({error:'Invalid login'}); }
+  clearLoginFailures(req._loginKey,req._loginIp);
   res.cookie(ADMIN_COOKIE,signToken(),{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict',path:'/',maxAge:2*60*60*1000});
   res.json({ok:true});
 });
-app.post('/api/admin/logout',(req,res)=>{res.clearCookie(ADMIN_COOKIE,{path:'/'});res.json({ok:true});});
+app.post('/api/admin/logout',adminMutationGuard,(req,res)=>{res.clearCookie(ADMIN_COOKIE,{path:'/'});res.json({ok:true});});
 app.get('/api/admin/me',auth,(req,res)=>res.json({ok:true}));
 
 app.get('/api/admin/dashboard',auth,async(req,res)=>{
@@ -274,7 +285,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
   res.json({settings:s,stock:stock.rows[0].count,sold:sold.rows[0].count,orders:orders.rows,inventory:inv.rows,today:today.rows[0]});
 });
 
-app.post('/api/admin/settings',auth,async(req,res)=>{
+app.post('/api/admin/settings',auth,adminMutationGuard,async(req,res)=>{
   const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled','bonus_purchase_qty'];
   if(req.body.bonus_purchase_qty!==undefined){
     const qty=Number(req.body.bonus_purchase_qty);
@@ -294,7 +305,7 @@ app.post('/api/admin/settings',auth,async(req,res)=>{
   const fresh=await settings();
   res.json({ok:true,pricePerId:Number(fresh.price_per_id)||1});
 });
-app.post('/api/admin/orders/:orderId/approve',auth,async(req,res)=>{
+app.post('/api/admin/orders/:orderId/approve',auth,adminMutationGuard,async(req,res)=>{
   try{
     const ord=await q("SELECT * FROM orders WHERE order_id=$1",[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
@@ -305,7 +316,7 @@ app.post('/api/admin/orders/:orderId/approve',auth,async(req,res)=>{
     res.json({ok:true});
   }catch(e){console.error('Approve error:',e);res.status(500).json({error:e.message||'Could not approve order'});}
 });
-app.post('/api/admin/orders/:orderId/reject',auth,async(req,res)=>{
+app.post('/api/admin/orders/:orderId/reject',auth,adminMutationGuard,async(req,res)=>{
   try{
     const r=await q("UPDATE orders SET status='rejected' WHERE order_id=$1 AND status='payment_received' RETURNING order_id",[req.params.orderId]);
     if(!r.rows[0]) return res.status(400).json({error:'Only pending payment orders can be rejected'});
@@ -313,14 +324,14 @@ app.post('/api/admin/orders/:orderId/reject',auth,async(req,res)=>{
   }catch(e){res.status(500).json({error:'Could not reject order'});}
 });
 
-app.post('/api/admin/assets',auth,upload.fields([{name:'logo',maxCount:1},{name:'qr',maxCount:1}]),async(req,res)=>{
+app.post('/api/admin/assets',auth,adminMutationGuard,upload.fields([{name:'logo',maxCount:1},{name:'qr',maxCount:1}]),async(req,res)=>{
   for(const key of ['logo','qr']){
     const file=req.files?.[key]?.[0];
     if(file){ const data=`data:${file.mimetype};base64,${file.buffer.toString('base64')}`; await q('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',[key==='logo'?'logo_data':'qr_data',data]); }
   }
   res.json({ok:true});
 });
-app.post('/api/admin/inventory',auth,async(req,res)=>{
+app.post('/api/admin/inventory',auth,adminMutationGuard,async(req,res)=>{
   const rows=Array.isArray(req.body.items)?req.body.items:[];
   if(rows.length>500) return res.status(400).json({error:'Maximum 500 IDs per upload'});
   if(!rows.length) return res.status(400).json({error:'No IDs provided'});
@@ -328,7 +339,7 @@ app.post('/api/admin/inventory',auth,async(req,res)=>{
   try{ await client.query('BEGIN'); for(const item of rows){ if(!item.login_id) continue; await client.query('INSERT INTO inventory(login_id,login_password,extra_data) VALUES($1,$2,$3)',[encryptSecret(item.login_id),encryptSecret(item.login_password||null),encryptSecret(item.extra_data||null)]); } await client.query('COMMIT'); res.json({ok:true}); }
   catch(e){await client.query('ROLLBACK');res.status(500).json({error:'Could not add inventory'});} finally{client.release();}
 });
-app.delete('/api/admin/inventory/:id',auth,async(req,res)=>{ await q("DELETE FROM inventory WHERE id=$1 AND status='available'",[req.params.id]); res.json({ok:true}); });
+app.delete('/api/admin/inventory/:id',auth,adminMutationGuard,async(req,res)=>{ await q("DELETE FROM inventory WHERE id=$1 AND status='available'",[req.params.id]); res.json({ok:true}); });
 
 async function createOrder(req,res){
   const qty=Number(req.body.qty), name=(req.body.name||'').trim(), phone=(req.body.phone||'').trim();
@@ -506,7 +517,7 @@ app.post('/api/claim-bonus/:utr', siteGate, claimRateLimit, async(req,res)=>{
   finally{client.release();}
 });
 
-app.post('/api/admin/manual-bonus-release/:utr',auth,async(req,res)=>{
+app.post('/api/admin/manual-bonus-release/:utr',auth,adminMutationGuard,async(req,res)=>{
   const client=await pool.connect();
   try{
     await client.query('BEGIN');
