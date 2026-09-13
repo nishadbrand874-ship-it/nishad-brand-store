@@ -12,6 +12,19 @@ const QRCode = require('qrcode');
 
 const app = express();
 app.set('trust proxy', 1);
+
+// Keep the Cloudflare site-wide verification on the verified custom domain.
+// Render's service hostname is redirected before the Turnstile gate loads,
+// because the Turnstile widget is authorized for nishadbrand.online.
+app.use((req,res,next)=>{
+  if (process.env.NODE_ENV === 'production') {
+    const host=String(req.headers.host||'').split(':')[0].toLowerCase();
+    if (host==='nishad-brand-store.onrender.com' && req.path!=='/health') {
+      return res.redirect(308, 'https://nishadbrand.online'+String(req.originalUrl||'/'));
+    }
+  }
+  next();
+});
 const ADMIN_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-nishad_admin' : 'nishad_admin';
 const CF_GATE_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-nishad_cf_verified' : 'nishad_cf_verified';
 const upload = multer({
