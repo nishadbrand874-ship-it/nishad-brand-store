@@ -507,26 +507,30 @@ body.stock-empty-mode .store-section{padding-bottom:0}
 body.stock-empty-mode .check{margin-top:10px}
 @media(max-width:600px){.empty-stock-notice{min-height:76px;gap:3px;font-size:13px!important}.empty-stock-notice .out-stock-mark{width:34px;height:34px;font-size:25px}.empty-stock-notice .out-stock-text{font-size:14px}.empty-stock-notice .coming-soon{font-size:10px}}
 
-/* V44.36 — animated colorful empty-stock background */
+/* V44.37 — premium vivid animated empty-stock background */
 .empty-stock-notice{
   position:relative!important;
   overflow:hidden!important;
   isolation:isolate;
-  background:linear-gradient(120deg,#fff1f2,#fef3c7,#e0f2fe,#ede9fe,#dcfce7,#fff1f2)!important;
-  background-size:400% 400%!important;
-  border:1px solid rgba(248,113,113,.35)!important;
-  box-shadow:0 10px 30px rgba(59,130,246,.14),inset 0 0 35px rgba(255,255,255,.65)!important;
-  animation:emptyStockBg 7s ease infinite!important;
+  color:#fff!important;
+  background:linear-gradient(115deg,#071a52 0%,#123a8f 24%,#6d28d9 48%,#be185d 70%,#0f766e 100%)!important;
+  background-size:350% 350%!important;
+  border:1px solid rgba(255,255,255,.28)!important;
+  box-shadow:0 12px 34px rgba(30,64,175,.28),inset 0 1px 0 rgba(255,255,255,.18),inset 0 -18px 40px rgba(2,6,23,.18)!important;
+  animation:emptyStockBgPremium 8s ease-in-out infinite!important;
 }
 .empty-stock-notice::before,.empty-stock-notice::after{
-  content:"";position:absolute;z-index:-1;border-radius:999px;filter:blur(18px);opacity:.42;pointer-events:none;
+  content:"";position:absolute;z-index:-1;border-radius:999px;filter:blur(24px);pointer-events:none;
 }
-.empty-stock-notice::before{width:90px;height:90px;left:8%;top:-35px;background:#fb7185;animation:emptyOrb1 4.5s ease-in-out infinite alternate}
-.empty-stock-notice::after{width:110px;height:110px;right:7%;bottom:-48px;background:#38bdf8;animation:emptyOrb2 5.2s ease-in-out infinite alternate}
-.empty-stock-notice .out-stock-mark{position:relative;z-index:1;transform:translateY(0);animation:emptyMarkFloat 2.2s ease-in-out infinite,emptyMarkGlow 1.8s ease-in-out infinite alternate}
-@keyframes emptyStockBg{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-@keyframes emptyOrb1{from{transform:translate(0,0) scale(.85)}to{transform:translate(45px,18px) scale(1.18)}}
-@keyframes emptyOrb2{from{transform:translate(0,0) scale(.85)}to{transform:translate(-40px,-18px) scale(1.15)}}
-@keyframes emptyMarkFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-@keyframes emptyMarkGlow{from{box-shadow:0 4px 16px rgba(185,28,28,.28)}to{box-shadow:0 6px 24px rgba(220,38,38,.48),0 0 14px rgba(251,113,133,.28)}}
-@media(max-width:600px){.empty-stock-notice{background-size:500% 500%!important}}
+.empty-stock-notice::before{width:150px;height:150px;left:-25px;top:-75px;background:#22d3ee;opacity:.48;animation:emptyOrb1Premium 5s ease-in-out infinite alternate}
+.empty-stock-notice::after{width:170px;height:170px;right:-35px;bottom:-85px;background:#f472b6;opacity:.46;animation:emptyOrb2Premium 5.8s ease-in-out infinite alternate}
+.empty-stock-notice .out-stock-mark{position:relative;z-index:2;transform:translateY(0);background:linear-gradient(145deg,#ef4444,#b91c1c)!important;color:#fff!important;box-shadow:0 7px 24px rgba(0,0,0,.28),0 0 22px rgba(248,113,113,.45)!important;animation:emptyMarkFloat 2.2s ease-in-out infinite,emptyMarkGlowPremium 1.8s ease-in-out infinite alternate}
+.empty-stock-notice .out-stock-text,.empty-stock-notice .coming-soon{position:relative;z-index:2;color:#fff!important;text-shadow:0 2px 8px rgba(0,0,0,.3)}
+.empty-stock-notice .out-stock-text{font-size:18px!important;letter-spacing:1px!important}
+.empty-stock-notice .coming-soon{font-size:13px!important;letter-spacing:.9px!important;opacity:.96}
+@keyframes emptyStockBgPremium{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes emptyOrb1Premium{from{transform:translate(0,0) scale(.8)}to{transform:translate(90px,38px) scale(1.3)}}
+@keyframes emptyOrb2Premium{from{transform:translate(0,0) scale(.8)}to{transform:translate(-85px,-38px) scale(1.28)}}
+@keyframes emptyMarkFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes emptyMarkGlowPremium{from{box-shadow:0 7px 22px rgba(0,0,0,.28),0 0 12px rgba(248,113,113,.3)}to{box-shadow:0 9px 30px rgba(0,0,0,.34),0 0 26px rgba(251,113,133,.62)}}
+@media(max-width:600px){.empty-stock-notice{background-size:500% 500%!important}.empty-stock-notice .out-stock-text{font-size:16px!important}.empty-stock-notice .coming-soon{font-size:12px!important}}
