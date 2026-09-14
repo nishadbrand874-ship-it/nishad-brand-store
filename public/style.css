@@ -614,3 +614,46 @@ body.stock-empty-mode .check{margin-top:10px}
 @media(max-width:600px){
   .empty-stock-notice{background-size:190% 190%,190% 190%,190% 190%,420% 420%!important}
 }
+
+/* V44.41 — final premium out-of-stock palette: deep navy + royal blue + violet + subtle coral */
+.empty-stock-notice{
+  background:
+    radial-gradient(120% 180% at 8% 0%,rgba(59,130,246,.34) 0%,rgba(59,130,246,0) 48%),
+    radial-gradient(110% 170% at 92% 100%,rgba(236,72,153,.28) 0%,rgba(236,72,153,0) 50%),
+    linear-gradient(120deg,#07152f 0%,#102a5c 28%,#243b8f 52%,#4c2a83 74%,#7c263f 100%) !important;
+  background-size:140% 140%,140% 140%,260% 260% !important;
+  background-position:0% 0%,100% 100%,0% 50% !important;
+  border:1px solid rgba(147,197,253,.38)!important;
+  box-shadow:0 16px 42px rgba(2,8,23,.48),inset 0 1px 0 rgba(255,255,255,.15),inset 0 -18px 40px rgba(2,6,23,.20)!important;
+  animation:emptyStockFinalPremium 10s ease-in-out infinite alternate!important;
+}
+.empty-stock-notice::before{
+  display:block!important;
+  width:180px;height:180px;left:-70px;top:-110px;
+  background:#38bdf8!important;opacity:.18!important;filter:blur(34px)!important;
+  animation:emptyFinalGlowLeft 7s ease-in-out infinite alternate!important;
+}
+.empty-stock-notice::after{
+  display:block!important;
+  width:190px;height:190px;right:-75px;bottom:-120px;
+  background:#fb7185!important;opacity:.15!important;filter:blur(36px)!important;
+  animation:emptyFinalGlowRight 8s ease-in-out infinite alternate!important;
+}
+.empty-stock-notice .out-stock-mark{
+  background:linear-gradient(145deg,#f43f5e 0%,#dc2626 55%,#991b1b 100%)!important;
+  border:2px solid rgba(255,255,255,.38)!important;
+  box-shadow:0 9px 28px rgba(0,0,0,.40),0 0 24px rgba(248,113,113,.42)!important;
+}
+.empty-stock-notice>span:not(.out-stock-mark){
+  position:relative;z-index:2;color:#fff!important;text-shadow:0 2px 10px rgba(0,0,0,.38)!important;
+}
+@keyframes emptyStockFinalPremium{
+  0%{background-position:0% 0%,100% 100%,0% 50%}
+  50%{background-position:18% 12%,82% 88%,55% 50%}
+  100%{background-position:35% 25%,65% 75%,100% 50%}
+}
+@keyframes emptyFinalGlowLeft{from{transform:translate(0,0) scale(.85)}to{transform:translate(90px,45px) scale(1.2)}}
+@keyframes emptyFinalGlowRight{from{transform:translate(0,0) scale(.85)}to{transform:translate(-85px,-45px) scale(1.22)}}
+@media(max-width:600px){
+  .empty-stock-notice{background-size:180% 180%,180% 180%,340% 340%!important}
+}
