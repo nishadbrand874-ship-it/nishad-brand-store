@@ -741,3 +741,31 @@ body.stock-empty-mode .check{margin-top:10px}
 }
 
 .important-instructions h3{font-size:14px}.important-instructions li{font-size:11px}.important-instructions li::before{width:16px;height:16px;font-size:10px}}
+
+/* V44.48: Select IDs label + premium buy icon */
+.id-select-label{
+  margin: 6px 0 10px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  opacity: .9;
+}
+.buy-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-right:5px;
+  font-size:0.95em;
+  transform:translateY(1px);
+}
+
+/* V44.50: Buy Now cart icon */
+.buy-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-right:5px;
+  font-size:.92em;
+  line-height:1;
+  transform:translateY(1px);
+}
