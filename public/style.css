@@ -699,3 +699,20 @@ body.stock-empty-mode .check{margin-top:10px}
 @media(max-width:600px){
   .empty-stock-notice{background-size:190% 190%,190% 190%,330% 330%!important}
 }
+
+
+.important-instructions{
+  width:min(92%,760px);
+  margin:22px auto 14px;
+  padding:18px 20px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:18px;
+  background:linear-gradient(135deg,rgba(18,28,56,.96),rgba(43,25,76,.94));
+  box-shadow:0 12px 35px rgba(0,0,0,.25);
+  color:#fff;
+}
+.important-instructions h3{margin:0 0 12px;font-size:17px;text-align:center;letter-spacing:.2px}
+.important-instructions ul{margin:0;padding-left:22px;display:grid;gap:8px}
+.important-instructions li{font-size:13px;line-height:1.45;color:rgba(255,255,255,.9)}
+.important-instructions li b{font-weight:700}
+@media (max-width:600px){.important-instructions{padding:15px 16px;border-radius:15px}.important-instructions h3{font-size:16px}.important-instructions li{font-size:12px}}
