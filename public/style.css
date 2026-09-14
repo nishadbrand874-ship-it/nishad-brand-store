@@ -769,3 +769,14 @@ body.stock-empty-mode .check{margin-top:10px}
   line-height:1;
   transform:translateY(1px);
 }
+
+/* V44.51: cart icon before Select Number of IDs */
+.select-cart-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-right:6px;
+  font-size:1em;
+  line-height:1;
+  transform:translateY(1px);
+}
