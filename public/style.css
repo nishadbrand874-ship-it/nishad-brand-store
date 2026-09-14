@@ -707,12 +707,30 @@ body.stock-empty-mode .check{margin-top:10px}
   padding:18px 20px;
   border:1px solid rgba(255,255,255,.12);
   border-radius:18px;
-  background:linear-gradient(135deg,rgba(18,28,56,.96),rgba(43,25,76,.94));
-  box-shadow:0 12px 35px rgba(0,0,0,.25);
+  background:
+    radial-gradient(120% 180% at 0% 0%,rgba(37,99,235,.28) 0%,rgba(37,99,235,0) 52%),
+    radial-gradient(110% 170% at 100% 100%,rgba(124,58,237,.30) 0%,rgba(124,58,237,0) 54%),
+    linear-gradient(135deg,#08152f 0%,#102a56 48%,#24154b 100%);
+  background-size:150% 150%,150% 150%,220% 220%;
+  background-position:0% 0%,100% 100%,0% 50%;
+  box-shadow:0 14px 38px rgba(2,8,23,.38),inset 0 1px 0 rgba(255,255,255,.12);
+  animation:importantInstructionsGlow 10s ease-in-out infinite alternate;
   color:#fff;
 }
+@keyframes importantInstructionsGlow{
+  0%{background-position:0% 0%,100% 100%,0% 50%}
+  50%{background-position:18% 12%,82% 88%,50% 50%}
+  100%{background-position:35% 25%,65% 75%,100% 50%}
+}
+
 .important-instructions h3{margin:0 0 12px;font-size:17px;text-align:center;letter-spacing:.2px}
 .important-instructions ul{margin:0;padding-left:22px;display:grid;gap:8px}
 .important-instructions li{font-size:13px;line-height:1.45;color:rgba(255,255,255,.9)}
 .important-instructions li b{font-weight:700}
-@media (max-width:600px){.important-instructions{padding:15px 16px;border-radius:15px}.important-instructions h3{font-size:16px}.important-instructions li{font-size:12px}}
+@media (max-width:600px){.important-instructions{padding:15px 16px;border-radius:15px}@keyframes importantInstructionsGlow{
+  0%{background-position:0% 0%,100% 100%,0% 50%}
+  50%{background-position:18% 12%,82% 88%,50% 50%}
+  100%{background-position:35% 25%,65% 75%,100% 50%}
+}
+
+.important-instructions h3{font-size:16px}.important-instructions li{font-size:12px}}
