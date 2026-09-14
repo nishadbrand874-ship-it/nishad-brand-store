@@ -1,5 +1,5 @@
 'use strict';
-let config=null, selected=null, pollTimer=null, countdownTimer=null, storeRefreshTimer=null, storeRefreshBusy=false, turnstileWidgetId=null, siteGateWidgetId=null, siteVerified=false, siteGateBusy=false, displayStockCount=1;
+let config=null, selected=null, pollTimer=null, countdownTimer=null, storeRefreshTimer=null, storeRefreshBusy=false, turnstileWidgetId=null, siteGateWidgetId=null, siteVerified=false, siteGateBusy=false;
 const $=id=>document.getElementById(id);
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 function money(n){return Number(n||0).toLocaleString('en-IN');}
@@ -37,7 +37,9 @@ async function refreshStoreStock(){
     const sb=$('stockBanner');
     if(sb){
       sb.className='stock-banner in';
-      sb.innerHTML='ℹ STOCK ACTIVITY (DISPLAY ONLY) • '+displayStockCount+' ID';
+      const realStock=Number(d.stock||0);
+      sb.className=realStock>0?'stock-banner in':'stock-banner out';
+      sb.innerHTML=realStock>0?'✓ ID STOCK AVAILABLE • '+realStock+' ID':'✕ OUT OF STOCK';
     }
     const cards=$('packages');
     if(cards && !$('modal')?.classList.contains('hidden')) return;
@@ -74,15 +76,6 @@ async function refreshStoreStock(){
     }
   }catch(e){console.warn('Store stock refresh:',e);}
   finally{storeRefreshBusy=false;}
-}
-function updateDisplayStockPulse(){
-  displayStockCount=Math.floor(Math.random()*30)+1;
-  const sb=$('stockBanner');
-  if(sb){ sb.className='stock-banner in'; sb.innerHTML='ℹ STOCK ACTIVITY (DISPLAY ONLY) • '+displayStockCount+' ID'; }
-}
-function startDisplayStockPulse(){
-  updateDisplayStockPulse();
-  setInterval(updateDisplayStockPulse,3500);
 }
 function startStoreAutoRefresh(){
   if(storeRefreshTimer) return;
@@ -128,7 +121,7 @@ async function init(){
     const r=await fetch('/api/config?ts='+Date.now(),{cache:'no-store'}); config=await r.json(); updateBonusCopy(); const cb=document.querySelector('.claim-box'); if(cb) cb.classList.toggle('hidden', String(config.bonusOfferEnabled||'true')!=='true'); if(!r.ok) throw new Error(config.error||'Configuration failed');
     $('siteName').textContent=config.siteName||'NISHAD BRAND'; $('logo').src=config.logo||'/logo.png';
     $('wa').href='https://wa.me/'+String(config.whatsapp||'').replace(/\D/g,'');
-    const sb=$('stockBanner'); if(sb){ sb.className='stock-banner in'; sb.innerHTML='ℹ STOCK ACTIVITY (DISPLAY ONLY) • '+displayStockCount+' ID'; }
+    const sb=$('stockBanner'); if(sb){ const realStock=Number(config.stock||0); sb.className=realStock>0?'stock-banner in':'stock-banner out'; sb.innerHTML=realStock>0?'✓ ID STOCK AVAILABLE • '+realStock+' ID':'✕ OUT OF STOCK'; }
     const newsBar=$('newsBar'),newsText=$('newsText');
     if(config.news&&String(config.news).trim()){newsText.textContent=String(config.news);newsBar.classList.remove('hidden');}else newsBar.classList.add('hidden');
     const box=$('packages'),packages=config.packages||[]; box.classList.remove('hidden');
@@ -136,7 +129,6 @@ async function init(){
       '<div class="card custom-card"><div class="qty">Custom Quantity</div><div class="stock-mini '+(Number(config.stock||0)>0?'in':'out')+'">'+(Number(config.stock||0)>0?'✓ '+Number(config.stock)+' ID AVAILABLE':'✕ OUT OF STOCK')+'</div><div class="custom-help">₹'+money(config.pricePerId)+' per ID • Enter how many IDs you need</div><div class="custom-row"><input id="customQty" class="customQty" type="number" min="1" max="'+Number(config.stock||0)+'" value="1" inputmode="numeric" oninput="updateCustomTotal()" onblur="normalizeCustomQty()"><div id="customTotal" class="price">₹'+money(config.pricePerId)+'</div></div><button class="buy" '+(!config.stock||!config.pricePerId?'disabled':'')+' onclick="buyCustom()">Buy Custom Quantity</button></div>'; 
     updateCustomTotal();
     startStoreAutoRefresh();
-    startDisplayStockPulse();
   }catch(e){$('packages').innerHTML='<div class="error">Store load failed: '+esc(e.message)+'</div>';}
 }
 function updateCustomTotal(){const el=$('customQty'),total=$('customTotal');if(!el||!total||!config)return;const raw=String(el.value||'').trim();if(!raw){total.textContent='₹0';return;}let qty=Math.floor(Number(raw));if(!Number.isFinite(qty)||qty<1){total.textContent='₹0';return;}const stock=Number(config.stock||0);if(stock>0&&qty>stock){total.textContent='₹'+money(Number(config.pricePerId||0)*stock)+' (max '+stock+')';return;}total.textContent='₹'+money(Number(config.pricePerId||0)*qty);}
@@ -205,5 +197,9 @@ async function claimBonus(){
 async function checkUTR(){const u=$('utr').value.trim();if(!/^[A-Za-z0-9]{8,35}$/.test(u)){$('result').innerHTML='<div class="error">Valid UTR / Transaction ID डालें (8–35 letters/digits).</div>';return;}$('result').textContent='Checking…';try{const r=await fetch('/api/order-check/'+encodeURIComponent(u));const d=await r.json();if(!d.found){$('result').innerHTML='<div class="error">Not Found — इस UTR/Payment ID से कोई verified purchase नहीं मिला।</div>';return;}showCheck(d.items,d.order);}catch(e){$('result').innerHTML='<div class="error">'+esc(e.message)+'</div>';}}
 function showCheck(items,order){if(order.status==='rejected'){ $('result').innerHTML='<div class="error"><b>❌ PAYMENT REJECTED</b><br>Is UTR / Transaction ID ko Admin ne reject kar diya hai.<br><small>Payment rejected — ID release nahi hogi.</small></div>';return;} if(order.status!=='approved'&&order.status!=='paid'){ $('result').innerHTML='<div class="pending"><b>Payment Pending Approval</b><br>Payment record mil gaya hai, lekin admin approval abhi pending hai.<br>Order: <code>'+esc(order.order_id)+'</code></div>';return;} const rows=credentialRows(items,'ID ');$('result').innerHTML='<div class="success"><b>Verified Purchase</b><br>Order: <code>'+esc(order.order_id)+'</code><div class="copy-all-wrap">'+copyAllButton(items,'📋 Copy All IDs & Passwords')+'</div>'+rows+'</div>'; }
 
-// Start the site-wide Cloudflare gate on first page load.
-initSiteGate();
+
+// Start the site-wide Cloudflare gate as soon as the page DOM is ready.
+document.addEventListener('DOMContentLoaded',()=>{
+  initSiteGate();
+  init();
+});
