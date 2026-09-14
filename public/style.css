@@ -506,3 +506,27 @@ body.stock-empty-mode main{padding-top:28px}
 body.stock-empty-mode .store-section{padding-bottom:0}
 body.stock-empty-mode .check{margin-top:10px}
 @media(max-width:600px){.empty-stock-notice{min-height:76px;gap:3px;font-size:13px!important}.empty-stock-notice .out-stock-mark{width:34px;height:34px;font-size:25px}.empty-stock-notice .out-stock-text{font-size:14px}.empty-stock-notice .coming-soon{font-size:10px}}
+
+/* V44.36 — animated colorful empty-stock background */
+.empty-stock-notice{
+  position:relative!important;
+  overflow:hidden!important;
+  isolation:isolate;
+  background:linear-gradient(120deg,#fff1f2,#fef3c7,#e0f2fe,#ede9fe,#dcfce7,#fff1f2)!important;
+  background-size:400% 400%!important;
+  border:1px solid rgba(248,113,113,.35)!important;
+  box-shadow:0 10px 30px rgba(59,130,246,.14),inset 0 0 35px rgba(255,255,255,.65)!important;
+  animation:emptyStockBg 7s ease infinite!important;
+}
+.empty-stock-notice::before,.empty-stock-notice::after{
+  content:"";position:absolute;z-index:-1;border-radius:999px;filter:blur(18px);opacity:.42;pointer-events:none;
+}
+.empty-stock-notice::before{width:90px;height:90px;left:8%;top:-35px;background:#fb7185;animation:emptyOrb1 4.5s ease-in-out infinite alternate}
+.empty-stock-notice::after{width:110px;height:110px;right:7%;bottom:-48px;background:#38bdf8;animation:emptyOrb2 5.2s ease-in-out infinite alternate}
+.empty-stock-notice .out-stock-mark{position:relative;z-index:1;transform:translateY(0);animation:emptyMarkFloat 2.2s ease-in-out infinite,emptyMarkGlow 1.8s ease-in-out infinite alternate}
+@keyframes emptyStockBg{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes emptyOrb1{from{transform:translate(0,0) scale(.85)}to{transform:translate(45px,18px) scale(1.18)}}
+@keyframes emptyOrb2{from{transform:translate(0,0) scale(.85)}to{transform:translate(-40px,-18px) scale(1.15)}}
+@keyframes emptyMarkFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes emptyMarkGlow{from{box-shadow:0 4px 16px rgba(185,28,28,.28)}to{box-shadow:0 6px 24px rgba(220,38,38,.48),0 0 14px rgba(251,113,133,.28)}}
+@media(max-width:600px){.empty-stock-notice{background-size:500% 500%!important}}
