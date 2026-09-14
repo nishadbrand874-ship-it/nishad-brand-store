@@ -588,3 +588,29 @@ body.stock-empty-mode .check{margin-top:10px}
     background-size:360% 360%!important;
   }
 }
+
+/* V44.40 — darker premium out-of-stock background */
+.empty-stock-notice{
+  background:
+    radial-gradient(circle at 18% 25%,rgba(59,130,246,.34) 0,rgba(59,130,246,0) 34%),
+    radial-gradient(circle at 82% 20%,rgba(124,58,237,.40) 0,rgba(124,58,237,0) 36%),
+    radial-gradient(circle at 86% 86%,rgba(239,68,68,.28) 0,rgba(239,68,68,0) 34%),
+    linear-gradient(120deg,#06142f 0%,#102a63 32%,#31206f 56%,#7c243f 78%,#9a3412 100%) !important;
+  background-size:150% 150%,150% 150%,150% 150%,320% 320% !important;
+  background-position:0% 0%,100% 0%,100% 100%,0% 50% !important;
+  border:1px solid rgba(255,255,255,.30)!important;
+  box-shadow:0 16px 40px rgba(2,8,23,.48),inset 0 1px 0 rgba(255,255,255,.16),inset 0 -18px 42px rgba(0,0,0,.22)!important;
+  animation:emptyStockDarkPremium 11s ease-in-out infinite alternate!important;
+}
+.empty-stock-notice .out-stock-mark{
+  background:linear-gradient(145deg,#ff4d67,#dc2626 55%,#991b1b)!important;
+  box-shadow:0 8px 26px rgba(0,0,0,.38),0 0 24px rgba(248,113,113,.42)!important;
+}
+@keyframes emptyStockDarkPremium{
+  0%{background-position:0% 0%,100% 0%,100% 100%,0% 50%}
+  50%{background-position:28% 22%,72% 30%,78% 72%,55% 50%}
+  100%{background-position:55% 42%,35% 55%,35% 45%,100% 50%}
+}
+@media(max-width:600px){
+  .empty-stock-notice{background-size:190% 190%,190% 190%,190% 190%,420% 420%!important}
+}
