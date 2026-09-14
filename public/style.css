@@ -494,3 +494,15 @@ body:not(.site-verified){overflow:hidden}
 
 .copy-all-wrap{margin:10px 0 6px}.copy-all-cred{border:1px solid #93c5fd!important;background:linear-gradient(135deg,#eff6ff,#ecfeff)!important;color:#0f3b67!important;border-radius:10px!important;padding:8px 12px!important;font-size:12px!important;font-weight:900!important;cursor:pointer;box-shadow:0 2px 6px rgba(15,59,103,.10);transition:.16s ease}.copy-all-cred:hover{transform:translateY(-1px);box-shadow:0 5px 12px rgba(15,59,103,.14)}.copy-all-cred:active{transform:translateY(0)}
 @media(max-width:600px){.copy-all-cred{width:100%;padding:9px 10px!important;font-size:11px!important}}
+
+
+/* Empty inventory storefront mode: show only stock notice + UTR check + bonus claim */
+.empty-stock-notice{display:flex!important;align-items:center;justify-content:center;gap:10px;min-height:48px;font-size:13px!important;letter-spacing:.6px!important}
+.empty-stock-notice .out-stock-mark{width:24px;height:24px;border-radius:50%;display:inline-grid;place-items:center;background:#b91c1c;color:#fff;font-size:18px;line-height:1;font-weight:1000;box-shadow:0 3px 12px rgba(185,28,28,.25)}
+.empty-stock-notice .coming-soon{font-weight:1000;margin-left:3px}
+.store-section.empty-stock .news-bar,.store-section.empty-stock .hero-title,.store-section.empty-stock #packages{display:none!important}
+body.stock-empty-mode .site-footer{display:none!important}
+body.stock-empty-mode main{padding-top:28px}
+body.stock-empty-mode .store-section{padding-bottom:0}
+body.stock-empty-mode .check{margin-top:10px}
+@media(max-width:600px){.empty-stock-notice{min-height:44px;gap:7px;font-size:10px!important}.empty-stock-notice .out-stock-mark{width:20px;height:20px;font-size:15px}.empty-stock-notice .coming-soon{font-size:9px}}
