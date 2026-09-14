@@ -534,3 +534,32 @@ body.stock-empty-mode .check{margin-top:10px}
 @keyframes emptyMarkFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @keyframes emptyMarkGlowPremium{from{box-shadow:0 7px 22px rgba(0,0,0,.28),0 0 12px rgba(248,113,113,.3)}to{box-shadow:0 9px 30px rgba(0,0,0,.34),0 0 26px rgba(251,113,133,.62)}}
 @media(max-width:600px){.empty-stock-notice{background-size:500% 500%!important}.empty-stock-notice .out-stock-text{font-size:16px!important}.empty-stock-notice .coming-soon{font-size:12px!important}}
+
+/* V44.38 — richer premium aurora empty-stock background */
+.empty-stock-notice{
+  background:
+    radial-gradient(circle at 12% 20%,rgba(34,211,238,.48) 0,rgba(34,211,238,0) 34%),
+    radial-gradient(circle at 88% 25%,rgba(168,85,247,.52) 0,rgba(168,85,247,0) 38%),
+    radial-gradient(circle at 72% 100%,rgba(236,72,153,.48) 0,rgba(236,72,153,0) 42%),
+    linear-gradient(120deg,#07142f 0%,#0b2f68 28%,#312e81 52%,#7e255e 76%,#123b5d 100%) !important;
+  background-size:140% 140%,140% 140%,140% 140%,320% 320% !important;
+  background-position:0% 0%,100% 0%,100% 100%,0% 50% !important;
+  border:1px solid rgba(255,255,255,.34)!important;
+  box-shadow:0 14px 38px rgba(7,20,47,.34),inset 0 1px 0 rgba(255,255,255,.2),inset 0 -20px 45px rgba(0,0,0,.2)!important;
+  animation:emptyAuroraBg 10s ease-in-out infinite alternate!important;
+}
+.empty-stock-notice .out-stock-mark{
+  width:48px!important;height:48px!important;
+  background:linear-gradient(145deg,#ff4d67,#c1123f 55%,#8b0d35)!important;
+  border:2px solid rgba(255,255,255,.32)!important;
+  box-shadow:0 8px 24px rgba(0,0,0,.32),0 0 28px rgba(255,77,103,.5)!important;
+}
+@keyframes emptyAuroraBg{
+  0%{background-position:0% 0%,100% 0%,100% 100%,0% 50%}
+  50%{background-position:35% 25%,70% 35%,55% 75%,55% 50%}
+  100%{background-position:65% 45%,35% 55%,20% 45%,100% 50%}
+}
+@media(max-width:600px){
+  .empty-stock-notice{background-size:180% 180%,180% 180%,180% 180%,420% 420%!important}
+  .empty-stock-notice .out-stock-mark{width:44px!important;height:44px!important;font-size:29px!important}
+}
