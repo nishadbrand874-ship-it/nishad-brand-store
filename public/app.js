@@ -170,6 +170,7 @@ async function checkQrStatus(orderId){
     if(!r.ok) throw new Error(d.error||'Verification failed');
     if(d.status==='approved' || d.status==='paid'){stopPolling();showIDs(d.items,d.order);return;}
     if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="pending"><b>Payment received ✓</b><br>Admin approval pending. Approval ke baad hi ID release hogi.<br><small>Payment details securely hidden.</small></div>'; return; }
+    if(d.status==='rejected'){ stopPolling(); $('payStatus').innerHTML='<div class="error"><b>❌ PAYMENT REJECTED</b><br>Aapne galat UTR / Transaction ID submit kiya hai, isliye payment request reject ho gayi.<br><b>Kripya sahi UTR submit karein aur payment karke dobara UTR submit karein.</b><br><small>Payment rejected — ID release nahi hogi.</small></div>'; $('utrMsg').innerHTML='<div class="error"><b>❌ PAYMENT REJECTED</b><br>Galat UTR submit hone ki wajah se request reject ho gayi. Kripya sahi UTR ke saath payment karke naya order/QR se UTR submit karein.</div>'; return; }
     if(d.status==='expired'){stopPolling();$('payStatus').innerHTML='<div class="error">QR expired. Please click Buy Now again to generate a new QR.</div>';return;}
   }catch(e){console.warn(e);}
 }
