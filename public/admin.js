@@ -205,7 +205,7 @@ $('dash').innerHTML=renderDashboardStats(d);
 const s=d.settings||{};window.bonusOfferEnabled=s.bonus_offer_enabled!=='false';$('settings').innerHTML='<div class="gateway-tip">📱 <b>UPI QR:</b> हर order में खरीदी गई ID की संख्या के हिसाब से exact amount वाला UPI QR अपने आप बनेगा. Payment के बाद customer UTR submit करेगा और आप manually approve करेंगे.</div><div class="formgrid">'+[['site_name','Site Name'],['whatsapp_number','WhatsApp Number'],['price_per_id','Price per ID'],['upi_vpa','UPI ID / VPA'],['upi_name','UPI Payee Name']].map(([k,l])=>'<label>'+l+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>').join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows="4" placeholder="Store news यहाँ लिखें...">'+esc(s.news||'')+'</textarea></label>';
 $('ordersTable').innerHTML=ordersTable(d.orders||[]);
 $('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);
-$('bonusManage').innerHTML=renderBonusManagement(s);}
+$('bonusManage').innerHTML=renderBonusManagement(s);$('discountManage').innerHTML=renderPackageDiscountManagement(s);}
 function ordersTable(rows){
   // Payment Approvals में केवल UTR/payment submit किए हुए orders दिखाएँ.
   // WAITING PAYMENT (created) orders user के order-check flow में रहेंगे,
@@ -214,6 +214,18 @@ function ordersTable(rows){
   if(!rows.length)return '<div class="empty">No payment requests yet.</div>';
   return '<div class="table-wrap"><table><thead><tr><th>Order</th><th>Amount</th><th>UTR / Payment</th><th>Status</th><th>Created</th><th>Action</th></tr></thead><tbody>'+rows.map(r=>'<tr><td><b>'+esc(r.order_id)+'</b><br>'+esc(r.package_qty)+' ID</td><td>₹'+(Number(r.amount_paise||0)/100).toLocaleString('en-IN')+'</td><td><code>'+esc(r.utr||r.payment_id||'—')+'</code></td><td>'+statusBadge(r.status)+'</td><td>'+esc(new Date(r.created_at).toLocaleString('en-IN'))+'</td><td>'+(r.status==='payment_received'?'<button class="approve" onclick="approve(\''+esc(r.order_id)+'\')">✓ APPROVE & RELEASE ID</button><button class="reject" onclick="rejectOrder(\''+esc(r.order_id)+'\')">Reject</button>':r.status==='approved'||r.status==='paid'?'<span class="oktext">ID released</span>':r.status==='rejected'?'<span class="oktext">Rejected</span>':'—')+'</td></tr>').join('')+'</tbody></table></div>';
 }
+function renderPackageDiscountManagement(s){
+  const pqty=[1,2,5,10,15,20];
+  const rows=pqty.map(q=>{
+    const base=Number(s.price_per_id||0)*q;
+    const dis=Number(s['package_discount_'+q]||0);
+    const safeDis=Number.isFinite(dis)&&dis>0?Math.min(base,dis):0;
+    const final=Math.max(0,base-safeDis);
+    return '<div class=\"discount-row\"><div class=\"discount-title\"><b>'+q+' ID Package</b><span>Base Price: ₹'+base.toLocaleString('en-IN')+'</span></div><label>Save Discount (₹)<input class=\"packageDiscount\" data-qty=\"'+q+'\" type=\"number\" min=\"0\" max=\"'+base+'\" step=\"1\" value=\"'+safeDis+'\"></label><div class=\"discount-final\">Customer pays <b>₹'+final.toLocaleString('en-IN')+'</b><br><small>Save ₹'+safeDis.toLocaleString('en-IN')+'</small></div></div>';
+  }).join('');
+  return '<div class=\"discount-settings-box discount-standalone\"><div class=\"discount-note\"><b>Manual Save Discount</b><br>Example: 5 ID का Base ₹1000 है और आप ₹30 discount रखते हैं, तो customer को ₹970 दिखेगा और <b>Save ₹30</b> लिखा आएगा.</div><div class=\"discount-list\">'+rows+'</div><button class=\"primary discount-save-btn\" onclick=\"savePackageDiscounts()\">💾 SAVE ALL DISCOUNTS</button><div id=\"discountSaveMsg\"></div></div>';
+}
+
 function renderBonusManagement(s){
   const enabled=s.bonus_offer_enabled!=='false';
   const qty=Math.max(1,Math.min(100000,parseInt(s.bonus_purchase_qty,10)||10));
