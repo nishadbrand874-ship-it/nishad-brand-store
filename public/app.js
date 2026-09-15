@@ -208,4 +208,3 @@ document.addEventListener('DOMContentLoaded',()=>{
   init();
 });
 
-<style>.stock-capacity-indicator{display:block;width:100%;max-width:420px;height:6px;margin:8px auto 0;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden}.stock-capacity-fill{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#18c98a,#1aa7ff);transition:width .35s ease}</style>
