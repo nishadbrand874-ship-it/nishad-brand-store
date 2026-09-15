@@ -39,7 +39,8 @@ async function refreshStoreStock(){
       sb.className='stock-banner in';
       const realStock=Number(d.stock||0);
       sb.className=realStock>0?'stock-banner in':'stock-banner out empty-stock-notice';
-      sb.innerHTML=realStock>0?'✓ ID STOCK AVAILABLE • '+realStock+' ID':'<span class=\"out-stock-mark\">×</span><span>OUT OF STOCK</span><span class=\"coming-soon\">MORE ID COMING SOON</span>';
+      sb.innerHTML=realStock>0?'✓ ID STOCK AVAILABLE • '+realStock+' ID<span class=\"stock-capacity-indicator\" aria-label=\"Stock level\"><span class=\"stock-capacity-fill\"></span></span>':'<span class=\"out-stock-mark\">×</span><span>OUT OF STOCK</span><span class=\"coming-soon\">MORE ID COMING SOON</span>';
+      if(realStock>0){ const fill=sb.querySelector('.stock-capacity-fill'); if(fill) fill.style.width=(Math.max(0,Math.min(50,realStock))/50*100)+'%'; }
       document.querySelector('.store-section')?.classList.toggle('empty-stock', realStock<=0);
       document.body.classList.toggle('stock-empty-mode', realStock<=0);
     }
@@ -123,7 +124,8 @@ async function init(){
     const r=await fetch('/api/config?ts='+Date.now(),{cache:'no-store'}); config=await r.json(); updateBonusCopy(); const cb=document.querySelector('.claim-box'); if(cb) cb.classList.toggle('hidden', String(config.bonusOfferEnabled||'true')!=='true'); if(!r.ok) throw new Error(config.error||'Configuration failed');
     $('siteName').textContent=config.siteName||'NISHAD BRAND'; $('logo').src=config.logo||'/logo.png';
     $('wa').href='https://wa.me/'+String(config.whatsapp||'').replace(/\D/g,'');
-    const sb=$('stockBanner'); if(sb){ const realStock=Number(config.stock||0); sb.className=realStock>0?'stock-banner in':'stock-banner out empty-stock-notice'; sb.innerHTML=realStock>0?'✓ ID STOCK AVAILABLE • '+realStock+' ID':'<span class=\"out-stock-mark\">×</span><span>OUT OF STOCK</span><span class=\"coming-soon\">MORE ID COMING SOON</span>'; document.querySelector('.store-section')?.classList.toggle('empty-stock', realStock<=0); document.body.classList.toggle('stock-empty-mode', realStock<=0); }
+    const sb=$('stockBanner'); if(sb){ const realStock=Number(config.stock||0); sb.className=realStock>0?'stock-banner in':'stock-banner out empty-stock-notice'; sb.innerHTML=realStock>0?'✓ ID STOCK AVAILABLE • '+realStock+' ID<span class=\"stock-capacity-indicator\" aria-label=\"Stock level\"><span class=\"stock-capacity-fill\"></span></span>':'<span class=\"out-stock-mark\">×</span><span>OUT OF STOCK</span><span class=\"coming-soon\">MORE ID COMING SOON</span>';
+      if(realStock>0){ const fill=sb.querySelector('.stock-capacity-fill'); if(fill) fill.style.width=(Math.max(0,Math.min(50,realStock))/50*100)+'%'; } document.querySelector('.store-section')?.classList.toggle('empty-stock', realStock<=0); document.body.classList.toggle('stock-empty-mode', realStock<=0); }
     const newsBar=$('newsBar'),newsText=$('newsText');
     if(config.news&&String(config.news).trim()){newsText.textContent=String(config.news);newsBar.classList.remove('hidden');}else newsBar.classList.add('hidden');
     const box=$('packages'),packages=config.packages||[]; box.classList.remove('hidden');
@@ -205,3 +207,5 @@ document.addEventListener('DOMContentLoaded',()=>{
   initSiteGate();
   init();
 });
+
+<style>.stock-capacity-indicator{display:block;width:100%;max-width:420px;height:6px;margin:8px auto 0;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden}.stock-capacity-fill{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#18c98a,#1aa7ff);transition:width .35s ease}</style>
