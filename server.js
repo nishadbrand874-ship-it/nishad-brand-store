@@ -213,7 +213,6 @@ async function normalizeStorePrice(){ try {
   }
   await q("INSERT INTO settings(key,value) VALUES ('bonus_offer_enabled','true') ON CONFLICT(key) DO NOTHING");
   await q("INSERT INTO settings(key,value) VALUES ('bonus_purchase_qty','10') ON CONFLICT(key) DO NOTHING");
-  for (const qty of [1,2,5,10,15,20]) await q("INSERT INTO settings(key,value) VALUES ($1,'0') ON CONFLICT(key) DO NOTHING",['package_discount_'+qty]);
  } catch(e) { console.warn('Price/bonus initialization skipped:', e.message); } }
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
 async function settings(){ const r=await q('SELECT key,value FROM settings'); return Object.fromEntries(r.rows.map(x=>[x.key,x.value])); }
@@ -224,10 +223,15 @@ function publicSettings(s, stock=0){
   const basePrice = Number.isFinite(savedPrice) && savedPrice > 0 ? savedPrice : 1;
   const packages = [1,2,5,10,15,20].map(qty=>{
     const originalPrice = Math.round(basePrice * qty * 100) / 100;
-    const rawDiscount = Number(s['package_discount_'+qty]);
-    const discount = Number.isFinite(rawDiscount) && rawDiscount > 0 ? Math.min(rawDiscount, Math.max(0, originalPrice - 0.01)) : 0;
-    const price = Math.round((originalPrice - discount) * 100) / 100;
-    return {qty, originalPrice, discount, price, available: stock >= qty};
+    const rawDiscount = Number(s['package_discount_'+qty] || 0);
+    const discount = Number.isFinite(rawDiscount) && rawDiscount > 0 ? Math.min(originalPrice, Math.round(rawDiscount*100)/100) : 0;
+    return {
+      qty,
+      price: Math.max(0, Math.round((originalPrice - discount) * 100) / 100),
+      originalPrice,
+      discount,
+      available: stock >= qty
+    };
   });
   const bonusPurchaseQty = Math.max(1, Math.min(100000, parseInt(s.bonus_purchase_qty,10) || 10));
   return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim(), bonusOfferEnabled:s.bonus_offer_enabled!=='false', bonusPurchaseQty};
@@ -291,18 +295,6 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 app.post('/api/admin/settings',auth,adminMutationGuard,async(req,res)=>{
   const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled','bonus_purchase_qty',
     'package_discount_1','package_discount_2','package_discount_5','package_discount_10','package_discount_15','package_discount_20'];
-  for (const qty of [1,2,5,10,15,20]) {
-    const key='package_discount_'+qty;
-    if(req.body[key]!==undefined){
-      const discount=Number(req.body[key]);
-      const currentPrice=Number(req.body.price_per_id!==undefined ? req.body.price_per_id : await setting('price_per_id'));
-      const packageTotal=(Number.isFinite(currentPrice)&&currentPrice>0?currentPrice:1)*qty;
-      if(!Number.isFinite(discount) || discount<0 || discount>=packageTotal){
-        return res.status(400).json({error:'Invalid discount for '+qty+' ID package. Discount must be less than package price.'});
-      }
-      req.body[key]=discount.toFixed(2).replace(/\.00$/,'');
-    }
-  }
   if(req.body.bonus_purchase_qty!==undefined){
     const qty=Number(req.body.bonus_purchase_qty);
     if(!Number.isInteger(qty) || qty<1 || qty>100000){
@@ -316,6 +308,16 @@ app.post('/api/admin/settings',auth,adminMutationGuard,async(req,res)=>{
       return res.status(400).json({error:'Invalid price per ID'});
     }
     req.body.price_per_id=price.toFixed(2).replace(/\.00$/,'');
+  }
+  for(const qty of [1,2,5,10,15,20]){
+    const key='package_discount_'+qty;
+    if(req.body[key]!==undefined){
+      const discount=Number(req.body[key]);
+      if(!Number.isFinite(discount) || discount<0 || discount>100000){
+        return res.status(400).json({error:'Invalid discount for '+qty+' ID package'});
+      }
+      req.body[key]=discount.toFixed(2).replace(/\.00$/,'');
+    }
   }
   for(const key of allowed){ if(req.body[key]!==undefined) await q('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',[key,String(req.body[key])]); }
   const fresh=await settings();
@@ -365,9 +367,9 @@ async function createOrder(req,res){
   const savedPrice=Number(s.price_per_id);
   const basePrice=Number.isFinite(savedPrice) && savedPrice>0 ? savedPrice : 1;
   const originalPrice=Math.round(basePrice * qty * 100) / 100;
-  const rawDiscount=Number(s['package_discount_'+qty]);
-  const discount=Number.isFinite(rawDiscount) && rawDiscount>0 && [1,2,5,10,15,20].includes(qty) ? Math.min(rawDiscount, Math.max(0, originalPrice-0.01)) : 0;
-  const price=Math.round((originalPrice-discount)*100)/100;
+  const packageDiscount=([1,2,5,10,15,20].includes(qty)) ? Number(s['package_discount_'+qty] || 0) : 0;
+  const discount=Number.isFinite(packageDiscount) && packageDiscount>0 ? Math.min(originalPrice, packageDiscount) : 0;
+  const price=Math.max(0, Math.round((originalPrice-discount) * 100) / 100);
   if(!price) return res.status(400).json({error:'Package not configured'});
   const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
   if(count.rows[0].count<qty) return res.status(409).json({error:'Not enough stock'});
@@ -387,7 +389,7 @@ async function createOrder(req,res){
     const upiLink='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payee)+'&am='+encodeURIComponent(amount)+'&cu=INR&tn='+encodeURIComponent(orderId);
     const qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
     await q('INSERT INTO orders(order_id,qr_code_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7)',[orderId,orderTokenHash,qty,money(price),'created',name,phone]);
-    res.json({orderId,orderToken,qrImage,upiLink,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,expiresAt:Date.now()+300000});
+    res.json({orderId,orderToken,qrImage,upiLink,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,originalAmount:money(originalPrice),discount:money(discount),expiresAt:Date.now()+300000});
   }catch(e){console.error('Manual UPI order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
 app.post('/api/orders', siteGate, rateLimit(apiHits,60*1000,20), createOrder);

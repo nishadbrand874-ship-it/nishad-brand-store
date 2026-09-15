@@ -57,14 +57,10 @@ async function refreshStoreStock(){
         if(!qty || !btn) return;
         const available=stock>=qty && price>0;
         if(mini){mini.className='stock-mini '+(available?'in':'out');mini.textContent=available?'✓ STOCK AVAILABLE':'✕ OUT OF STOCK';}
-        const pkg=(config.packages||[]).find(x=>Number(x.qty)===qty);
-        const finalPrice=Number(pkg?.price||price*qty);
-        const originalPrice=Number(pkg?.originalPrice||finalPrice);
-        const discount=Number(pkg?.discount||0);
-        if(priceEl){ priceEl.innerHTML=discount>0 && originalPrice>finalPrice ? '<span class="old-price">₹'+money(originalPrice)+'</span><span class="sale-price">₹'+money(finalPrice)+'</span><span class="save-price">Save ₹'+money(discount)+'</span>' : '₹'+money(finalPrice); }
+        if(priceEl) priceEl.textContent='₹'+money(price*qty);
         btn.disabled=!available;
         btn.textContent=available?'Buy Now':(stock<qty?'Out of Stock':'Price Not Set');
-        btn.setAttribute('onclick',"openPay("+qty+","+finalPrice+")");
+        btn.setAttribute('onclick',"openPay("+qty+","+Number(price*qty)+")");
       });
       const custom=$('customQty'), total=$('customTotal');
       if(custom){
@@ -133,7 +129,7 @@ async function init(){
     const newsBar=$('newsBar'),newsText=$('newsText');
     if(config.news&&String(config.news).trim()){newsText.textContent=String(config.news);newsBar.classList.remove('hidden');}else newsBar.classList.add('hidden');
     const box=$('packages'),packages=config.packages||[]; box.classList.remove('hidden');
-    box.innerHTML=Number(config.stock||0)<=0?'':packages.map(p=>{const disabled=!p.available||!p.price;const label=!p.available?'Out of Stock':(!p.price?'Price Not Set':'Buy Now');const discount=Number(p.discount||0);const priceHtml=discount>0&&Number(p.originalPrice)>Number(p.price)?'<span class="old-price">₹'+money(p.originalPrice)+'</span><span class="sale-price">₹'+money(p.price)+'</span><span class="save-price">Save ₹'+money(discount)+'</span>':'₹'+money(p.price);return '<div class="card"><div class="qty">'+p.qty+' ID</div><div class="stock-mini '+(p.available?'in':'out')+'">'+(p.available?'✓ STOCK AVAILABLE':'✕ OUT OF STOCK')+'</div><div class="price">'+priceHtml+'</div><button class="buy" '+(disabled?'disabled':'')+' onclick="openPay('+p.qty+','+Number(p.price||0)+')">'+label+'</button></div>';}).join('')+
+    box.innerHTML=Number(config.stock||0)<=0?'':packages.map(p=>{const disabled=!p.available||!p.price;const label=!p.available?'Out of Stock':(!p.price?'Price Not Set':'Buy Now');const pricing=p.discount>0?'<div class="price"><span class="old-price">₹'+money(p.originalPrice)+'</span> <span>₹'+money(p.price)+'</span></div><div class="save-text">Save ₹'+money(p.discount)+'</div>':'<div class="price">₹'+money(p.price)+'</div>';return '<div class="card"><div class="qty">'+p.qty+' ID</div><div class="stock-mini '+(p.available?'in':'out')+'">'+(p.available?'✓ STOCK AVAILABLE':'✕ OUT OF STOCK')+'</div>'+pricing+'<button class="buy" '+(disabled?'disabled':'')+' onclick="openPay('+p.qty+','+Number(p.price||0)+')">'+label+'</button></div>';}).join('')+
       (Number(config.stock||0)<=0?'':'<div class="card custom-card"><div class="qty">Custom Quantity</div><div class="stock-mini '+(Number(config.stock||0)>0?'in':'out')+'">'+(Number(config.stock||0)>0?'✓ '+Number(config.stock)+' ID AVAILABLE':'✕ OUT OF STOCK')+'</div><div class="custom-help">₹'+money(config.pricePerId)+' per ID • Enter how many IDs you need</div><div class="custom-row"><input id="customQty" class="customQty" type="number" min="1" max="'+Number(config.stock||0)+'" value="1" inputmode="numeric" oninput="updateCustomTotal()" onblur="normalizeCustomQty()"><div id="customTotal" class="price">₹'+money(config.pricePerId)+'</div></div><button class="buy" '+(!config.stock||!config.pricePerId?'disabled':'')+' onclick="buyCustom()">Buy Custom Quantity</button></div>'); 
     updateCustomTotal();
     startStoreAutoRefresh();
