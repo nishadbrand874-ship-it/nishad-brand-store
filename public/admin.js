@@ -229,15 +229,7 @@ function renderPackageDiscountManagement(s){
 function renderBonusManagement(s){
   const enabled=s.bonus_offer_enabled!=='false';
   const qty=Math.max(1,Math.min(100000,parseInt(s.bonus_purchase_qty,10)||10));
-  const pqty=[1,2,5,10,15,20];
-  const discountRows=pqty.map(q=>{
-    const base=Number(s.price_per_id||0)*q;
-    const dis=Number(s['package_discount_'+q]||0);
-    const final=Math.max(0,base-(Number.isFinite(dis)?dis:0));
-    return '<div class="discount-row"><div class="discount-title"><b>'+q+' ID</b><span>Base ₹'+base.toLocaleString('en-IN')+'</span></div><label>Save Discount (₹)<input class="packageDiscount" data-qty="'+q+'" type="number" min="0" step="0.01" value="'+(Number.isFinite(dis)&&dis>0?dis:0)+'"></label><div class="discount-final">Customer pays <b>₹'+final.toLocaleString('en-IN')+'</b><br><small>Save ₹'+(Number.isFinite(dis)&&dis>0?Math.min(base,dis):0).toLocaleString('en-IN')+'</small></div></div>';
-  }).join('');
   return '<div class="bonus-control"><div><b>🎁 '+qty+' ID Purchase Bonus</b><span>Customer bonus offer ON/OFF</span></div><button id="bonusToggle" class="bonus-toggle '+(enabled?'on':'off')+'" onclick="toggleBonusOffer()">'+(enabled?'🟢 BONUS OFFER ON':'🔴 BONUS OFFER OFF')+'</button></div>'
-    +'<div class="discount-settings-box"><h3>💰 Package Save Discount — Manual Setting</h3><p>हर package का <b>Save Discount</b> यहाँ manually set करें. उदाहरण: 5 ID का base ₹1000 है और discount ₹30 रखें तो customer को <b>₹970</b> और <b>Save ₹30</b> दिखेगा.</p><div class="discount-list">'+discountRows+'</div><button class="primary" onclick="savePackageDiscounts()">💾 SAVE ALL PACKAGE DISCOUNTS</button><div id="discountSaveMsg"></div></div>'
     +'<div class="bonus-settings-box"><h3>⚙ Bonus Eligibility Setting</h3><p>Admin manually तय करें कि कितनी IDs खरीदने पर 1 extra ID bonus मिलेगा.</p><div class="checkrow"><label>Purchase Quantity<input id="bonusPurchaseQty" type="number" min="1" max="100000" value="'+qty+'"></label><button class="primary" onclick="saveBonusPurchaseQty()">💾 SAVE BONUS SETTING</button></div><div class="bonus-preview">Current: '+qty+' ID खरीदने पर 1 extra ID bonus</div></div>'
     +'<div class="manual-bonus-box"><h3>🛠 Manual Bonus Claim</h3><p>Approved bonus-eligible UTR डालकर Admin manually 1 bonus ID release कर सकता है. Bonus पर अलग Admin approval नहीं होगा.</p><div class="checkrow"><label>UTR / Transaction ID<input id="manualBonusUtr" placeholder="UTR डालें"></label><button class="primary" onclick="manualBonusRelease()">🎁 RELEASE 1 BONUS ID</button></div><div id="manualBonusResult"></div></div>';
 }
