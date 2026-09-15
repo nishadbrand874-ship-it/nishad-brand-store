@@ -217,7 +217,14 @@ function ordersTable(rows){
 function renderBonusManagement(s){
   const enabled=s.bonus_offer_enabled!=='false';
   const qty=Math.max(1,Math.min(100000,parseInt(s.bonus_purchase_qty,10)||10));
+  const discountRows=[1,2,5,10,15,20].map(q=>{
+    const discount=Math.max(0,Number(s['package_discount_'+q])||0);
+    const total=(Number(s.price_per_id)||1)*q;
+    const finalPrice=Math.max(0.01,total-discount);
+    return '<div class="discount-row"><label><b>'+q+' ID</b><span>Original ₹'+Number(total).toLocaleString('en-IN')+'</span><input id="pkgDiscount_'+q+'" type="number" min="0" step="0.01" max="'+Math.max(0,total-0.01).toFixed(2)+'" value="'+discount+'"></label><div class="discount-preview">Pay ₹'+finalPrice.toLocaleString('en-IN',{maximumFractionDigits:2})+' • Save ₹'+discount.toLocaleString('en-IN',{maximumFractionDigits:2})+'</div></div>';
+  }).join('');
   return '<div class="bonus-control"><div><b>🎁 '+qty+' ID Purchase Bonus</b><span>Customer bonus offer ON/OFF</span></div><button id="bonusToggle" class="bonus-toggle '+(enabled?'on':'off')+'" onclick="toggleBonusOffer()">'+(enabled?'🟢 BONUS OFFER ON':'🔴 BONUS OFFER OFF')+'</button></div>'
+    +'<div class="discount-settings-box"><h3>🏷️ Package Save / Discount</h3><p>Har package ka <b>Save ₹ amount</b> yahin manually set karein. Example: 5 ID ka original ₹1000 aur discount ₹30 set karenge to customer ko <b>₹970</b> + <b>Save ₹30</b> dikhega. QR/payment amount bhi ₹970 hi rahega.</p><div class="discount-grid">'+discountRows+'</div><button class="primary" onclick="savePackageDiscounts()">💾 SAVE PACKAGE DISCOUNTS</button><div class="bonus-preview">0 discount ka matlab normal package price. Custom Quantity par package discount apply nahi hoga.</div></div>'
     +'<div class="bonus-settings-box"><h3>⚙ Bonus Eligibility Setting</h3><p>Admin manually तय करें कि कितनी IDs खरीदने पर 1 extra ID bonus मिलेगा.</p><div class="checkrow"><label>Purchase Quantity<input id="bonusPurchaseQty" type="number" min="1" max="100000" value="'+qty+'"></label><button class="primary" onclick="saveBonusPurchaseQty()">💾 SAVE BONUS SETTING</button></div><div class="bonus-preview">Current: '+qty+' ID खरीदने पर 1 extra ID bonus</div></div>'
     +'<div class="manual-bonus-box"><h3>🛠 Manual Bonus Claim</h3><p>Approved bonus-eligible UTR डालकर Admin manually 1 bonus ID release कर सकता है. Bonus पर अलग Admin approval नहीं होगा.</p><div class="checkrow"><label>UTR / Transaction ID<input id="manualBonusUtr" placeholder="UTR डालें"></label><button class="primary" onclick="manualBonusRelease()">🎁 RELEASE 1 BONUS ID</button></div><div id="manualBonusResult"></div></div>';
 }
@@ -230,6 +237,27 @@ async function addIDs(){const lines=$('ids').value.split('\n').map(x=>x.trim()).
 async function saveSettings(){const keys=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news'];const body={};keys.forEach(k=>body[k]=$('s_'+k).value);body.price_per_id=String(Number(body.price_per_id));body.bonus_offer_enabled=window.bonusOfferEnabled?'true':'false';const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));alert(r.ok?'Settings saved. Website rate is now ₹'+Number(d.pricePerId||0).toLocaleString('en-IN')+' per ID.':'Failed: '+(d.error||'Unable to save'));if(r.ok)load();}
 window.bonusOfferEnabled=true;
 function toggleBonusOffer(){window.bonusOfferEnabled=!window.bonusOfferEnabled;const b=$('bonusToggle');if(b){b.className='bonus-toggle '+(window.bonusOfferEnabled?'on':'off');b.textContent=window.bonusOfferEnabled?'🟢 BONUS OFFER ON':'🔴 BONUS OFFER OFF';}saveSettings();}
+
+async function savePackageDiscounts(){
+  const qtys=[1,2,5,10,15,20];
+  const body={};
+  for(const q of qtys){
+    const el=$('pkgDiscount_'+q);
+    const v=Number(el?.value||0);
+    if(!Number.isFinite(v)||v<0){return alert(q+' ID discount invalid hai.');}
+    body['package_discount_'+q]=String(v);
+  }
+  const price=Number($('s_price_per_id')?.value||0);
+  if(!Number.isFinite(price)||price<=0){return alert('Pehle valid Price per ID save karein.');}
+  for(const q of qtys){
+    if(Number(body['package_discount_'+q]) >= price*q){return alert(q+' ID package ka discount package price se kam hona chahiye.');}
+  }
+  const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){return alert(d.error||'Package discount save failed');}
+  alert('Package Save / Discount settings saved.');
+  load();
+}
 async function saveBonusPurchaseQty(){
   const el=$('bonusPurchaseQty');
   const qty=Number(el?.value);
