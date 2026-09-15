@@ -208,3 +208,25 @@ document.addEventListener('DOMContentLoaded',()=>{
   init();
 });
 
+
+
+// V44.61: top-corner Manage menu
+function toggleManageMenu(){
+  const m=document.getElementById('manageMenu'), b=document.getElementById('manageBtn');
+  if(!m) return;
+  const hidden=m.classList.toggle('hidden');
+  if(b) b.setAttribute('aria-expanded',String(!hidden));
+}
+function openManageSection(id){
+  const el=document.getElementById(id);
+  const m=document.getElementById('manageMenu'), b=document.getElementById('manageBtn');
+  if(m) m.classList.add('hidden');
+  if(b) b.setAttribute('aria-expanded','false');
+  if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+document.addEventListener('click',function(e){
+  const a=document.querySelector('.header-actions');
+  const m=document.getElementById('manageMenu');
+  const b=document.getElementById('manageBtn');
+  if(a && m && !a.contains(e.target)){m.classList.add('hidden');if(b)b.setAttribute('aria-expanded','false');}
+});

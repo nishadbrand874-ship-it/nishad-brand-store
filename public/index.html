@@ -17,7 +17,13 @@
       <p>Fast • Secure • Verified ID Store</p>
     </div>
   </div>
-  <div class="header-badge">✓ SECURE STORE</div>
+  <div class="header-actions">
+    <button id="manageBtn" class="manage-btn" type="button" onclick="toggleManageMenu()" aria-expanded="false" aria-controls="manageMenu">☰ Manage</button>
+    <div id="manageMenu" class="manage-menu hidden" role="menu">
+      <button type="button" role="menuitem" onclick="openManageSection('utrCheckSection')">✓ UTR Check</button>
+      <button type="button" role="menuitem" onclick="openManageSection('bonusClaimSection')">🎁 Bonus Claim</button>
+    </div>
+  </div>
 </header>
 <main>
 <section id="store" class="store-section">
@@ -30,10 +36,10 @@
     </div>
     <div class="trust-pill">⚡ INSTANT PROCESSING</div>
   </div><div id="packages" class="grid"></div></section>
-<section class="check">
+<section id="utrCheckSection" class="check">
   <div class="section-icon">✓</div>
   <div><p>अपना UTR / Transaction ID डालकर purchased ID/status check करें।</p><div class="checkrow"><input id="utr" placeholder="Enter UTR / Transaction ID" maxlength="35" inputmode="text" autocomplete="off"><button onclick="checkUTR()">Check</button></div><div id="result"></div></div>
-  <div class="claim-box"><h3 id="claimTitle">🎁 10 ID Purchase Bonus</h3><p id="claimDescription">10 ID खरीदने पर उसी UTR से <b>1 extra ID claim</b> करें। Claim केवल <b>1 बार</b> और payment approval के <b>24 घंटे के अंदर</b> होगा।</p><div class="checkrow"><input id="claimUtr" placeholder="Enter the same UTR" maxlength="35" inputmode="text" autocomplete="off"><button onclick="claimBonus()">Claim 1 ID</button></div><div id="claimResult"></div></div>
+  <div id="bonusClaimSection" class="claim-box"><h3 id="claimTitle">🎁 10 ID Purchase Bonus</h3><p id="claimDescription">10 ID खरीदने पर उसी UTR से <b>1 extra ID claim</b> करें। Claim केवल <b>1 बार</b> और payment approval के <b>24 घंटे के अंदर</b> होगा।</p><div class="checkrow"><input id="claimUtr" placeholder="Enter the same UTR" maxlength="35" inputmode="text" autocomplete="off"><button onclick="claimBonus()">Claim 1 ID</button></div><div id="claimResult"></div></div>
 </section>
 </main>
 <a id="wa" class="whatsapp" target="_blank" rel="noopener" aria-label="WhatsApp support"><span>◉</span><small>Help</small></a>
@@ -58,4 +64,4 @@
   <div class="verify-note"><b>Payment करें और UTR / Transaction ID नीचे submit करें.</b> QR में quantity के हिसाब से exact amount automatic रहेगा। <b>Admin approval के बिना ID release नहीं होगी.</b></div><div id="utrBox" class="utr-box"><input id="utrInput" placeholder="Enter UTR / Transaction ID" maxlength="35" inputmode="text" autocomplete="off"><div id="turnstileBox" class="turnstile-box"></div><button id="utrBtn" onclick="submitUTR()">Submit UTR</button><div id="utrMsg"></div></div>
   <div id="payStatus" class="qr-status">QR तैयार हो रहा है…</div>
 </div></div>
-<script src="app.js?v=44.59"></script></body></html>
+<script src="app.js?v=44.60"></script></body></html>
