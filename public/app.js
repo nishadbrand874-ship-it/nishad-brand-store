@@ -40,7 +40,7 @@ async function refreshStoreStock(){
       const realStock=Number(d.stock||0);
       sb.className=realStock>0?'stock-banner in':'stock-banner out empty-stock-notice';
       sb.innerHTML=realStock>0?'✓ ID STOCK AVAILABLE • '+realStock+' ID<span class=\"stock-capacity-indicator\" aria-label=\"Stock level\"><span class=\"stock-capacity-fill\"></span></span>':'<span class=\"out-stock-mark\">×</span><span>OUT OF STOCK</span><span class=\"coming-soon\">MORE ID COMING SOON</span>';
-      if(realStock>0){ const fill=sb.querySelector('.stock-capacity-fill'); if(fill) fill.style.width=(Math.max(0,Math.min(50,realStock))/50*100)+'%'; }
+      if(realStock>0){ const fill=sb.querySelector('.stock-capacity-fill'); if(fill) fill.style.width=(Math.max(0,Math.min(10,realStock))/10*100)+'%'; }
       document.querySelector('.store-section')?.classList.toggle('empty-stock', realStock<=0);
       document.body.classList.toggle('stock-empty-mode', realStock<=0);
     }
@@ -125,7 +125,7 @@ async function init(){
     $('siteName').textContent=config.siteName||'NISHAD BRAND'; $('logo').src=config.logo||'/logo.png';
     $('wa').href='https://wa.me/'+String(config.whatsapp||'').replace(/\D/g,'');
     const sb=$('stockBanner'); if(sb){ const realStock=Number(config.stock||0); sb.className=realStock>0?'stock-banner in':'stock-banner out empty-stock-notice'; sb.innerHTML=realStock>0?'✓ ID STOCK AVAILABLE • '+realStock+' ID<span class=\"stock-capacity-indicator\" aria-label=\"Stock level\"><span class=\"stock-capacity-fill\"></span></span>':'<span class=\"out-stock-mark\">×</span><span>OUT OF STOCK</span><span class=\"coming-soon\">MORE ID COMING SOON</span>';
-      if(realStock>0){ const fill=sb.querySelector('.stock-capacity-fill'); if(fill) fill.style.width=(Math.max(0,Math.min(50,realStock))/50*100)+'%'; } document.querySelector('.store-section')?.classList.toggle('empty-stock', realStock<=0); document.body.classList.toggle('stock-empty-mode', realStock<=0); }
+      if(realStock>0){ const fill=sb.querySelector('.stock-capacity-fill'); if(fill) fill.style.width=(Math.max(0,Math.min(10,realStock))/10*100)+'%'; } document.querySelector('.store-section')?.classList.toggle('empty-stock', realStock<=0); document.body.classList.toggle('stock-empty-mode', realStock<=0); }
     const newsBar=$('newsBar'),newsText=$('newsText');
     if(config.news&&String(config.news).trim()){newsText.textContent=String(config.news);newsBar.classList.remove('hidden');}else newsBar.classList.add('hidden');
     const box=$('packages'),packages=config.packages||[]; box.classList.remove('hidden');
