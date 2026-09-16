@@ -33,6 +33,7 @@ let voiceControlOn=false;
 let latestPaymentRequestId=null;
 let voicePendingOrders=[];
 let voiceCommandBusy=false;
+let voiceRestartTimer=null;
 function speakVoiceReply(text){
   try{
     const u=new SpeechSynthesisUtterance(text);
@@ -48,24 +49,25 @@ function setVoiceStatus(on,msg){
   if(b) b.textContent=on?'🎙 VOICE CONTROL ON':'🎙 VOICE CONTROL OFF';
   if(st) st.textContent=msg|| (on?'Sun raha hoon...':'Voice control band hai');
 }
+function normalizeVoiceText(v){
+  return String(v||'').toLowerCase().replace(/[.,!?;:]/g,' ').replace(/\s+/g,' ').trim();
+}
 function normalizeVoiceUtr(v){
   return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 }
 function findVoiceTarget(t){
   const pending=(voicePendingOrders||[]).filter(r=>r.status==='payment_received');
   if(!pending.length) return null;
-  // "last UTR" / "last request" means the newest pending payment request.
-  if(/\blast\s+(utr|u\s*t\s*r|request)\b/.test(t) || /lastutr|lastrequest/.test(t)) return pending[0];
-  const utrIndex=t.search(/(?:utr|u\s*t\s*r)(?:\s*(?:number|no|no\.|id))?\s*[:#-]?\s*([a-z0-9][a-z0-9\s-]{3,40})/i);
-  if(utrIndex>=0){
-    const m=t.match(/(?:utr|u\s*t\s*r)(?:\s*(?:number|no|no\.|id))?\s*[:#-]?\s*([a-z0-9][a-z0-9\s-]{3,40})/i);
-    const wanted=normalizeVoiceUtr(m&&m[1]);
+  const lastPattern=/\b(last|latest)\b\s*(utr|u\s*t\s*r|request)\b|\b(utr|u\s*t\s*r)\b.*\b(last|latest)\b|लास्ट\s*(यूटीआर|यूटीर|रिक्वेस्ट)|आखिरी\s*(यूटीआर|यूटीर|रिक्वेस्ट)/i;
+  if(lastPattern.test(t) || /lastutr|lastrequest|latestutr|latestrequest/.test(t)) return pending[0];
+  const m=t.match(/(?:utr|u\s*t\s*r|यूटीआर|यूटीर)(?:\s*(?:number|no|no\.|id|नंबर|नं|आईडी))?\s*[:#-]?\s*([a-z0-9][a-z0-9\s-]{3,40})/i);
+  if(m){
+    const wanted=normalizeVoiceUtr(m[1]);
     if(wanted){
       const exact=pending.find(r=>normalizeVoiceUtr(r.utr||r.payment_id)===wanted);
       if(exact) return exact;
     }
   }
-  // Also allow just speaking the UTR followed by "approve/reject".
   const candidates=t.match(/\b[a-z0-9]{6,35}\b/gi)||[];
   for(const c of candidates){
     const wanted=normalizeVoiceUtr(c);
@@ -74,62 +76,91 @@ function findVoiceTarget(t){
   }
   return pending[0];
 }
+function commandHasWord(t,words){return words.some(x=>new RegExp('(^|\\s)'+x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?=\\s|$)','i').test(t));}
 async function handleVoiceCommand(raw){
-  const t=String(raw||'').toLowerCase().replace(/[.,!?]/g,' ');
-  if(voiceCommandBusy) return;
-  const approveWords=['approve','approved','aproov','aprove','अनुमोदित','अप्रूव'];
-  const rejectWords=['reject','rejected','cancel','canceled','cancelled','रिजेक्ट','रद्द','कैंसल','कैंसिल'];
-  const hasApprove=approveWords.some(x=>t.includes(x));
-  const hasReject=rejectWords.some(x=>t.includes(x));
+  const t=normalizeVoiceText(raw);
+  if(voiceCommandBusy || !t) return;
+  const approveWords=['approve','approved','aproov','aprove','approv','approvee','अप्रूव','अप्रुव','अनुमोदित','मंजूर','मंज़ूर','स्वीकृत'];
+  const rejectWords=['reject','rejected','rejact','rejecte','cancel','canceled','cancelled','रिजेक्ट','रिजेक्टेड','रद्द','कैंसल','कैंसिल','निरस्त'];
+  const hasApprove=commandHasWord(t,approveWords)||/approve|aprov|apruv|अप्रूव|अप्रुव|मंजूर/.test(t);
+  const hasReject=commandHasWord(t,rejectWords)||/reject|rejact|cancel|रिजेक्ट|रद्द|कैंसल|कैंसिल/.test(t);
   if(!hasApprove && !hasReject) return;
   if(hasApprove && hasReject){ speakVoiceReply('बॉस, approve या reject में से एक command बोलिए।'); return; }
   const target=findVoiceTarget(t);
   if(!target){
+    setVoiceStatus(true,'कोई pending payment request नहीं है');
     speakVoiceReply('ठीक है बॉस, अभी कोई pending payment request नहीं है।');
     return;
   }
   voiceCommandBusy=true;
   const id=String(target.order_id);
+  const action=hasReject?'reject':'approve';
+  setVoiceStatus(true,'Processing: '+action.toUpperCase()+' '+id);
   try{
-    const action=hasReject?'reject':'approve';
-    const r=await fetch('/api/admin/orders/'+encodeURIComponent(id)+'/'+action,{method:'POST'});
+    const r=await fetch('/api/admin/orders/'+encodeURIComponent(id)+'/'+action,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest','X-Voice-Command':'1'}});
     const d=await r.json().catch(()=>({}));
     if(r.ok){
       latestPaymentRequestId=null;
       voicePendingOrders=voicePendingOrders.filter(x=>String(x.order_id)!==id);
-      if(action==='approve') speakVoiceReply('ठीक है बॉस, हमने request approve कर दी।');
-      else speakVoiceReply('ठीक है बॉस, हमने request reject कर दी।');
+      if(action==='approve') speakVoiceReply('ठीक है बॉस, request approve कर दी गई है और ID release हो गई है।');
+      else speakVoiceReply('ठीक है बॉस, request reject कर दी गई है।');
+      setVoiceStatus(true,'Command successful — '+action.toUpperCase());
       await load();
     }else{
+      setVoiceStatus(true,'Voice action failed: '+(d.error||'server error'));
       speakVoiceReply('बॉस, request पर action नहीं हो पाया।');
-      console.warn('Voice action failed',d);
+      console.warn('Voice action failed',r.status,d);
     }
   }catch(e){
+    setVoiceStatus(true,'Voice action network error');
     speakVoiceReply('बॉस, request पर action नहीं हो पाया।');
     console.warn('Voice action:',e);
   }finally{voiceCommandBusy=false;}
 }
 function startVoiceControl(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){setVoiceStatus(false,'इस browser में voice command support नहीं है');return;}
+  if(!SR){setVoiceStatus(false,'इस browser में voice command support नहीं है — Chrome/Edge इस्तेमाल करें');return;}
   if(voiceControlOn) return;
   voiceControlOn=true;
   voiceRecognition=new SR();
-  voiceRecognition.lang='hi-IN'; voiceRecognition.continuous=true; voiceRecognition.interimResults=false; voiceRecognition.maxAlternatives=3;
+  voiceRecognition.lang='hi-IN';
+  voiceRecognition.continuous=true;
+  voiceRecognition.interimResults=false;
+  voiceRecognition.maxAlternatives=5;
+  voiceRecognition.onstart=()=>setVoiceStatus(true,'🎙 Sun raha hoon — “approve kar do” बोलें');
   voiceRecognition.onresult=e=>{
     for(let i=e.resultIndex;i<e.results.length;i++) if(e.results[i].isFinal){
       const text=e.results[i][0]?.transcript||'';
+      console.log('[NISHAD VOICE]',text);
       handleVoiceCommand(text);
     }
   };
-  voiceRecognition.onerror=e=>{ if(e.error!=='aborted'&&e.error!=='no-speech') console.warn('Voice recognition:',e.error); };
-  voiceRecognition.onend=()=>{ if(voiceControlOn){ try{voiceRecognition.start();}catch(_){} } };
-  try{voiceRecognition.start();setVoiceStatus(true,'Sun raha hoon — “approve kar do”, “request reject/cancel kar do”, ya “last UTR approve/reject kar do” bol sakte hain');}
-  catch(e){voiceControlOn=false;setVoiceStatus(false,'Voice start नहीं हो पाया');}
+  voiceRecognition.onerror=e=>{
+    console.warn('Voice recognition:',e.error);
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      voiceControlOn=false;
+      setVoiceStatus(false,'Microphone permission Allow करें, फिर Voice Control ON करें');
+    }else if(e.error==='audio-capture'){
+      setVoiceStatus(true,'Microphone उपलब्ध नहीं है');
+    }
+  };
+  voiceRecognition.onend=()=>{
+    if(!voiceControlOn) return;
+    clearTimeout(voiceRestartTimer);
+    voiceRestartTimer=setTimeout(()=>{
+      if(!voiceControlOn || !voiceRecognition) return;
+      try{voiceRecognition.start();}catch(e){console.warn('Voice restart:',e);}
+    },350);
+  };
+  try{
+    voiceRecognition.start();
+    setVoiceStatus(true,'🎙 Sun raha hoon — “approve kar do”, “request reject/cancel kar do”, “last UTR approve/reject kar do” बोलें');
+  }catch(e){voiceControlOn=false;setVoiceStatus(false,'Voice start नहीं हो पाया — microphone Allow करें');}
 }
 function stopVoiceControl(){
   voiceControlOn=false;
-  if(voiceRecognition){try{voiceRecognition.stop();}catch(_){} voiceRecognition=null;}
+  clearTimeout(voiceRestartTimer); voiceRestartTimer=null;
+  if(voiceRecognition){try{voiceRecognition.onend=null;voiceRecognition.stop();}catch(_){} voiceRecognition=null;}
   setVoiceStatus(false);
 }
 function toggleVoiceControl(){voiceControlOn?stopVoiceControl():startVoiceControl();}
