@@ -204,7 +204,6 @@ function showCheck(items,order){if(order.status==='rejected'){ $('result').inner
 
 // Start the site-wide Cloudflare gate as soon as the page DOM is ready.
 document.addEventListener('DOMContentLoaded',()=>{
-  initSiteGate();
   init();
 });
 

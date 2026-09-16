@@ -254,7 +254,7 @@ app.post('/api/site-verify', rateLimit(apiHits,60*1000,30), async (req,res)=>{
   } catch(e){ console.error('Cloudflare site verification error:',e.message); res.status(502).json({error:'Cloudflare verification failed'}); }
 });
 
-app.get('/api/config', siteGate, async (req,res)=>{
+app.get('/api/config', async (req,res)=>{
   res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma','no-cache');
   try {
@@ -392,7 +392,7 @@ async function createOrder(req,res){
     res.json({orderId,orderToken,qrImage,upiLink,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,originalAmount:money(originalPrice),discount:money(discount),expiresAt:Date.now()+300000});
   }catch(e){console.error('Manual UPI order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
-app.post('/api/orders', siteGate, rateLimit(apiHits,60*1000,20), createOrder);
+app.post('/api/orders', rateLimit(apiHits,60*1000,20), createOrder);
 
 function verifyOrderToken(order,token){
   if(!order || !order.qr_code_id || !token) return false;
@@ -444,7 +444,7 @@ app.post('/api/orders/:orderId/utr', siteGate, rateLimit(apiHits,60*1000,20), as
   }
 });
 
-app.get('/api/payment/qr-status/:orderId', siteGate, rateLimit(apiHits,60*1000,60), async(req,res)=>{
+app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(req,res)=>{
   try{
     const ord=await q('SELECT order_id,qr_code_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
@@ -500,7 +500,7 @@ function claimRateLimit(req,res,next){
   if(a.count>5) return res.status(429).json({error:'Too many claim attempts. Please try again later.'});
   next();
 }
-app.post('/api/claim-bonus/:utr', siteGate, claimRateLimit, async(req,res)=>{
+app.post('/api/claim-bonus/:utr', claimRateLimit, async(req,res)=>{
   const utr=String(req.params.utr||'').trim().replace(/\s+/g,'');
   if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'});
   const client=await pool.connect();
@@ -560,7 +560,7 @@ app.post('/api/admin/manual-bonus-release/:utr',auth,adminMutationGuard,async(re
   }catch(e){try{await client.query('ROLLBACK')}catch{};console.error('Manual bonus release error:',e);res.status(500).json({error:'Could not manually release bonus ID'});}finally{client.release();}
 });
 
-app.get('/api/order-check/:utr', siteGate, rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
+app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
 
 app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile(path.join(__dirname,'public','admin.html')); });
 

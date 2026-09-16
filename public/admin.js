@@ -8,7 +8,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 function toggleMenu(){$('menu').classList.toggle('hidden')}
 function showSection(id){document.querySelectorAll('.section').forEach(x=>x.classList.add('hidden'));$(id).classList.remove('hidden');$('menu').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'});}
-async function login(){const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('user').value,password:$('pass').value})});const d=await r.json();if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();setTimeout(()=>startVoiceControl(),250);}else $('msg').textContent=d.error||'Login failed';}
+async function login(){const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('user').value,password:$('pass').value})});const d=await r.json();if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}else $('msg').textContent=d.error||'Login failed';}
 async function logout(){
   // Logout in one click: stop client activity immediately, clear the server cookie,
   // then replace the page so the login screen is shown without requiring a second click.
@@ -77,8 +77,8 @@ function findVoiceTarget(t){
 async function handleVoiceCommand(raw){
   const t=String(raw||'').toLowerCase().replace(/[.,!?]/g,' ');
   if(voiceCommandBusy) return;
-  const approveWords=['approve','approved','aproov','aprove','approve kar do','approve kr do','अनुमोदित','अप्रूव','अप्रूव कर दो'];
-  const rejectWords=['reject','rejected','cancel','canceled','cancelled','reject kar do','reject kr do','cancel kar do','cancel kr do','रिजेक्ट','रद्द','कैंसल','कैंसिल'];
+  const approveWords=['approve','approved','aproov','aprove','अनुमोदित','अप्रूव'];
+  const rejectWords=['reject','rejected','cancel','canceled','cancelled','रिजेक्ट','रद्द','कैंसल','कैंसिल'];
   const hasApprove=approveWords.some(x=>t.includes(x));
   const hasReject=rejectWords.some(x=>t.includes(x));
   if(!hasApprove && !hasReject) return;
@@ -268,4 +268,4 @@ async function saveBonusPurchaseQty(){
 }
 async function manualBonusRelease(){const utr=String($('manualBonusUtr')?.value||'').trim();if(!utr)return alert('UTR डालें.');if(!confirm('इस UTR पर 1 bonus ID manually release करनी है?'))return;const r=await fetch('/api/admin/manual-bonus-release/'+encodeURIComponent(utr),{method:'POST'});const d=await r.json().catch(()=>({}));const out=$('manualBonusResult');if(r.ok){out.innerHTML='<div class=\"manual-success\">✓ Bonus ID released successfully.<br><b>Login:</b> '+esc(d.bonus?.login_id||'')+'<br><b>Password:</b> '+esc(d.bonus?.login_password||'')+'</div>';$('manualBonusUtr').value='';load();}else{if(out)out.innerHTML='<div class=\"manual-error\">'+esc(d.error||'Manual bonus release failed')+'</div>';}}
 $('assets').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/admin/assets',{method:'POST',body:new FormData($('assets'))});alert(r.ok?'Assets uploaded.':'Upload failed');if(r.ok)load();};
-fetch('/api/admin/me').then(r=>{if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();setTimeout(()=>startVoiceControl(),250);}});
+fetch('/api/admin/me').then(r=>{if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}});
