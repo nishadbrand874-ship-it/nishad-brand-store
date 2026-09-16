@@ -485,7 +485,6 @@ body:after{width:360px;height:360px;right:-150px;bottom:5%;background:radial-gra
 .site-gate-card p{margin:0 auto 18px;color:#64748b;font-size:13px;line-height:1.5}
 .site-turnstile{min-height:70px;display:flex;justify-content:center;align-items:center}
 .site-gate-msg{margin-top:12px;color:#64748b;font-size:12px;min-height:18px}
-body:not(.site-verified){overflow:hidden}
 @media(max-width:520px){.site-gate-card{padding:24px 16px;border-radius:18px}.site-gate-card h2{font-size:20px}}
 
 /* Premium credential copy buttons */
