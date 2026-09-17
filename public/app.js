@@ -79,7 +79,13 @@ function initTurnstile(){
       theme:'dark',
       appearance:'always',
       execution:'render',
-      callback:()=>{},
+      callback:async(token)=>{
+        // The UTR endpoint can verify this token itself, but we also establish
+        // the server-side gate immediately after Turnstile reports success.
+        try{
+          await fetch('/api/site-verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});
+        }catch(e){console.warn('Cloudflare gate:',e);}
+      },
       'expired-callback':()=>{},
       'error-callback':()=>{}
     });

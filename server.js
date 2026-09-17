@@ -433,14 +433,36 @@ async function verifyTurnstile(token, req){
   if(!secret) return {ok:false, reason:'Cloudflare Turnstile is not configured'};
   if(!token || String(token).length<10) return {ok:false, reason:'Cloudflare verification required'};
   try{
-    const body=new URLSearchParams({secret,response:String(token),remoteip:clientIp(req)});
+    const body=new URLSearchParams({secret,response:String(token)});
+    const ip=clientIp(req); if(ip && ip!=='unknown') body.set('remoteip',ip);
     const r=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
     const d=await r.json();
-    return d?.success ? {ok:true} : {ok:false, reason:'Cloudflare verification failed'};
+    const host=String(d?.hostname||'').toLowerCase();
+    if(!d?.success) return {ok:false, reason:'Cloudflare verification failed'};
+    if(host && host!=='nishadbrand.online' && host!=='www.nishadbrand.online') return {ok:false, reason:'Cloudflare verification failed'};
+    return {ok:true};
   }catch(e){ console.error('Turnstile verify error:',e); return {ok:false, reason:'Cloudflare verification unavailable'}; }
 }
 
-app.post('/api/orders/:orderId/utr', siteGate, rateLimit(apiHits,60*1000,20), async(req,res)=>{
+async function utrCloudflareGuard(req,res,next){
+  // Prefer the already-issued site gate cookie. If it is missing, verify the
+  // Turnstile token submitted by the UTR form and issue the gate cookie here.
+  try {
+    const gate=String(req.cookies?.[CF_GATE_COOKIE]||'');
+    if(gate){
+      const data=jwt.verify(gate, process.env.JWT_SECRET);
+      if(data?.type==='cloudflare_gate') return next();
+    }
+  } catch {}
+
+  const token=String(req.body?.turnstileToken||'').trim();
+  const result=await verifyTurnstile(token,req);
+  if(!result.ok) return res.status(403).json({error:result.reason||'Cloudflare verification required'});
+  res.cookie(CF_GATE_COOKIE,signSiteGateToken(),{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:12*60*60*1000});
+  next();
+}
+
+app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*1000,20), async(req,res)=>{
   try{
     const orderId=String(req.params.orderId||'').trim();
     const orderToken=String(req.headers['x-order-token']||'').trim();
