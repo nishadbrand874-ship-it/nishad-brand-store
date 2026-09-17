@@ -208,6 +208,7 @@ async function migrateOrdersSchema(){
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS sms_verified_at TIMESTAMPTZ');
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS sms_amount_paise INTEGER');
   await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS sms_match_source TEXT');
+  await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS utr_submitted_at TIMESTAMPTZ');
   await q(`CREATE TABLE IF NOT EXISTS merchant_sms_verifications (
     id BIGSERIAL PRIMARY KEY,
     utr TEXT NOT NULL UNIQUE,
@@ -355,8 +356,9 @@ app.post('/api/admin/orders/:orderId/approve',auth,adminMutationGuard,async(req,
     const ord=await q("SELECT * FROM orders WHERE order_id=$1",[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
     if(ord.rows[0].status==='approved' || ord.rows[0].status==='paid') return res.json({ok:true,already:true});
-    if(ord.rows[0].status!=='payment_received') return res.status(400).json({error:'Payment has not been verified yet'});
+    if(ord.rows[0].status!=='payment_received') return res.status(400).json({error:'Payment is not pending verification'});
     if(!ord.rows[0].utr) return res.status(400).json({error:'UTR / Transaction ID is required before approval'});
+    if(!ord.rows[0].sms_verified_at || Number(ord.rows[0].sms_amount_paise)!==Number(ord.rows[0].amount_paise)) return res.status(409).json({error:'Payment SMS has not been verified with the exact order amount. Manual approval is blocked.'});
     await fulfillManual(req.params.orderId);
     res.json({ok:true});
   }catch(e){console.error('Approve error:',e);res.status(500).json({error:e.message||'Could not approve order'});}
@@ -477,7 +479,7 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*10
     if(Date.now() > new Date(order.created_at).getTime()+300000) return res.status(410).json({error:'QR expired. Please start a new order.'});
     const duplicate=await q('SELECT order_id,status FROM orders WHERE LOWER(utr)=LOWER($1) AND order_id<>$2 LIMIT 1',[utr,orderId]);
     if(duplicate.rows[0]) return res.status(409).json({error:'This UTR is already submitted for another order'});
-    const r=await q("UPDATE orders SET status='payment_received',utr=$1 WHERE order_id=$2 AND status='created' RETURNING order_id,utr,package_qty,amount_paise,status",[utr,orderId]);
+    const r=await q("UPDATE orders SET status='payment_received',utr=$1,utr_submitted_at=NOW() WHERE order_id=$2 AND status='created' RETURNING order_id,utr,package_qty,amount_paise,status,utr_submitted_at",[utr,orderId]);
     if(!r.rows[0]){
       const latest=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
       if(latest.rows[0]?.status==='payment_received') return res.json({ok:true,status:'pending_approval',order:latest.rows[0]});
@@ -489,7 +491,8 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*10
       const sv=sms.rows[0];
       if(Number(sv.amount_paise)!==Number(r.rows[0].amount_paise)){
         await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='amount_mismatch' WHERE id=$2",[orderId,sv.id]);
-        return res.json({ok:true,status:'pending_approval',order:r.rows[0],message:'UTR recorded, but SMS amount does not match the order amount. No ID was released.'});
+        await q("UPDATE orders SET status='rejected',sms_amount_paise=$1,sms_match_source='merchant_app_amount_mismatch' WHERE order_id=$2 AND status='payment_received'",[sv.amount_paise,orderId]);
+        return res.status(409).json({ok:false,status:'rejected',order:r.rows[0],message:'Payment amount does not match. Order rejected; no ID was released.'});
       }
       await q("UPDATE orders SET sms_verified_at=NOW(),sms_amount_paise=$1,sms_match_source='merchant_sms_app' WHERE order_id=$2 AND status='payment_received'",[sv.amount_paise,orderId]);
       await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='matched' WHERE id=$2",[orderId,sv.id]);
@@ -561,6 +564,21 @@ app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(
   }catch(e){console.error('Manual QR status error:',e);res.status(500).json({error:e.message||'Could not check order'});}
 });
 
+// Strict UTR verification: an order submitted with a UTR must receive a matching
+// merchant SMS (UTR + exact amount) within the verification window. Otherwise
+// it is rejected automatically and no ID can be released.
+const UTR_VERIFY_WINDOW_MS = 90 * 1000;
+async function autoRejectUnverifiedOrders(){
+  try{
+    await q(`UPDATE orders SET status='rejected'
+      WHERE status='payment_received'
+        AND utr IS NOT NULL
+        AND sms_verified_at IS NULL
+        AND COALESCE(utr_submitted_at, created_at) < NOW() - INTERVAL '90 seconds'`);
+  }catch(e){ console.error('Auto reject unverified UTRs:',e.message); }
+}
+setInterval(autoRejectUnverifiedOrders, 15000);
+
 async function fulfillManual(orderId){
   const client=await pool.connect();
   try{
@@ -569,6 +587,7 @@ async function fulfillManual(orderId){
     if(!ord.rows[0]) throw new Error('Order not found');
     if(ord.rows[0].status==='approved' || ord.rows[0].status==='paid'){ await client.query('COMMIT'); return; }
     if(ord.rows[0].status!=='payment_received' || !ord.rows[0].utr) throw new Error('UTR/payment is still pending');
+    if(!ord.rows[0].sms_verified_at || Number(ord.rows[0].sms_amount_paise)!==Number(ord.rows[0].amount_paise)) throw new Error('Payment SMS verification is required before ID release');
     const items=await client.query("SELECT id FROM inventory WHERE status='available' ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $1",[ord.rows[0].package_qty]);
     if(items.rows.length<ord.rows[0].package_qty){ await client.query('ROLLBACK'); throw new Error('Insufficient stock at fulfillment'); }
     for(const item of items.rows){
