@@ -52,3 +52,14 @@ INSERT INTO settings(key,value) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 CREATE UNIQUE INDEX IF NOT EXISTS orders_utr_unique ON orders(LOWER(utr)) WHERE utr IS NOT NULL;
+
+
+CREATE TABLE IF NOT EXISTS merchant_sms_verifications (
+  id BIGSERIAL PRIMARY KEY,
+  utr TEXT NOT NULL UNIQUE,
+  amount_paise INTEGER NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  matched_order_id TEXT,
+  match_status TEXT NOT NULL DEFAULT 'pending'
+);
+CREATE INDEX IF NOT EXISTS merchant_sms_verifications_order_idx ON merchant_sms_verifications(matched_order_id);
