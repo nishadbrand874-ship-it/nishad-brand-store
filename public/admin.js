@@ -58,17 +58,8 @@ function normalizeVoiceUtr(v){
 function findVoiceTarget(t){
   const pending=(voicePendingOrders||[]).filter(r=>r.status==='payment_received');
   if(!pending.length) return null;
-
-  // If a new payment alert already selected the newest request, use that exact order.
-  if(latestPaymentRequestId){
-    const selected=pending.find(r=>String(r.order_id)===String(latestPaymentRequestId));
-    if(selected && !/\b(utr|u\s*t\s*r)\b\s*[:#-]?\s*[a-z0-9]{6,35}/i.test(t)) return selected;
-  }
-
-  const lastPattern=/\b(last|latest)\b\s*(utr|u\s*t\s*r|request)\b|\b(utr|u\s*t\s*r)\b.*\b(last|latest)\b|\b(last|latest)\s*(payment|request)\b|लास्ट\s*(यूटीआर|यूटीर|रिक्वेस्ट|पेमेंट)|आखिरी\s*(यूटीआर|यूटीर|रिक्वेस्ट|पेमेंट)/i;
+  const lastPattern=/\b(last|latest)\b\s*(utr|u\s*t\s*r|request)\b|\b(utr|u\s*t\s*r)\b.*\b(last|latest)\b|लास्ट\s*(यूटीआर|यूटीर|रिक्वेस्ट)|आखिरी\s*(यूटीआर|यूटीर|रिक्वेस्ट)/i;
   if(lastPattern.test(t) || /lastutr|lastrequest|latestutr|latestrequest/.test(t)) return pending[0];
-
-  // Explicit UTR/order target, including spaces that speech recognition may insert.
   const m=t.match(/(?:utr|u\s*t\s*r|यूटीआर|यूटीर)(?:\s*(?:number|no|no\.|id|नंबर|नं|आईडी))?\s*[:#-]?\s*([a-z0-9][a-z0-9\s-]{3,40})/i);
   if(m){
     const wanted=normalizeVoiceUtr(m[1]);
@@ -77,7 +68,6 @@ function findVoiceTarget(t){
       if(exact) return exact;
     }
   }
-
   const candidates=t.match(/\b[a-z0-9]{6,35}\b/gi)||[];
   for(const c of candidates){
     const wanted=normalizeVoiceUtr(c);
@@ -90,8 +80,8 @@ function commandHasWord(t,words){return words.some(x=>new RegExp('(^|\\s)'+x.rep
 async function handleVoiceCommand(raw){
   const t=normalizeVoiceText(raw);
   if(voiceCommandBusy || !t) return;
-  const approveWords=['approve','approved','aproov','aprove','approv','approvee','approve kar','approve kr','approve kardo','approve kar do','अप्रूव','अप्रुव','अप्रूव कर','अप्रूव कर दो','अनुमोदित','मंजूर','मंज़ूर','स्वीकृत'];
-  const rejectWords=['reject','rejected','rejact','rejecte','cancel','canceled','cancelled','reject kar','reject kr','reject kardo','reject kar do','cancel kar','cancel kr','cancel kardo','रिजेक्ट','रिजेक्टेड','रिजेक्ट कर','रिजेक्ट कर दो','रद्द','कैंसल','कैंसिल','निरस्त'];
+  const approveWords=['approve','approved','aproov','aprove','approv','approvee','अप्रूव','अप्रुव','अनुमोदित','मंजूर','मंज़ूर','स्वीकृत'];
+  const rejectWords=['reject','rejected','rejact','rejecte','cancel','canceled','cancelled','रिजेक्ट','रिजेक्टेड','रद्द','कैंसल','कैंसिल','निरस्त'];
   const hasApprove=commandHasWord(t,approveWords)||/approve|aprov|apruv|अप्रूव|अप्रुव|मंजूर/.test(t);
   const hasReject=commandHasWord(t,rejectWords)||/reject|rejact|cancel|रिजेक्ट|रद्द|कैंसल|कैंसिल/.test(t);
   if(!hasApprove && !hasReject) return;
@@ -142,7 +132,6 @@ function startVoiceControl(){
     for(let i=e.resultIndex;i<e.results.length;i++) if(e.results[i].isFinal){
       const text=e.results[i][0]?.transcript||'';
       console.log('[NISHAD VOICE]',text);
-      setVoiceStatus(true,'सुना: '+text);
       handleVoiceCommand(text);
     }
   };
@@ -152,11 +141,7 @@ function startVoiceControl(){
       voiceControlOn=false;
       setVoiceStatus(false,'Microphone permission Allow करें, फिर Voice Control ON करें');
     }else if(e.error==='audio-capture'){
-      setVoiceStatus(true,'Microphone उपलब्ध नहीं है — mic check करें');
-    }else if(e.error==='network'){
-      setVoiceStatus(true,'Voice service network error — फिर से सुनने की कोशिश हो रही है');
-    }else if(e.error==='aborted'){
-      setVoiceStatus(true,'Voice restart हो रहा है…');
+      setVoiceStatus(true,'Microphone उपलब्ध नहीं है');
     }
   };
   voiceRecognition.onend=()=>{
