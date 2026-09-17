@@ -156,3 +156,12 @@ NISHAD BRAND storefront हर 3 सेकंड में `/api/config` से 
 - Claim endpoint is rate-limited to 5 attempts per 10 minutes per client IP.
 - Claim inventory allocation uses a database transaction with row locking, preventing double allocation during concurrent requests.
 - The order must have at least 10 original `order_items` before the bonus can be claimed.
+
+
+## V44.68 — SMS UTR Auto Verify
+- Customer must submit the UTR on the website first.
+- Authorized Merchant Verify Android app can send SMS-derived UTR + exact amount to `/api/merchant/sms-verify`.
+- Server matches the submitted UTR and exact order amount before fulfillment.
+- A reused UTR, wrong UTR, wrong amount, rejected order, or unknown UTR does not release inventory.
+- `MOBILE_APP_TOKEN` must be stored in Render Environment Variables and kept out of source control.
+- SMS is a reconciliation signal; for stronger payment assurance, pair this with a bank/PSP/gateway server-side transaction-status API.

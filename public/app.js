@@ -1,5 +1,5 @@
 'use strict';
-let config=null, selected=null, pollTimer=null, countdownTimer=null, storeRefreshTimer=null, storeRefreshBusy=false, turnstileWidgetId=null, turnstileToken="";
+let config=null, selected=null, pollTimer=null, countdownTimer=null, storeRefreshTimer=null, storeRefreshBusy=false, turnstileWidgetId=null;
 const $=id=>document.getElementById(id);
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 function money(n){return Number(n||0).toLocaleString('en-IN');}
@@ -79,9 +79,9 @@ function initTurnstile(){
       theme:'dark',
       appearance:'always',
       execution:'render',
-      callback:(token)=>{turnstileToken=String(token||'');},
-      'expired-callback':()=>{turnstileToken='';},
-      'error-callback':()=>{turnstileToken='';}
+      callback:()=>{},
+      'expired-callback':()=>{},
+      'error-callback':()=>{}
     });
   }catch(e){console.warn('Turnstile init:',e);setTimeout(initTurnstile,1000);}
 }
@@ -179,7 +179,7 @@ async function checkUTR(){const u=$('utr').value.trim();if(!/^[A-Za-z0-9]{8,35}$
 function showCheck(items,order){if(order.status==='rejected'){ $('result').innerHTML='<div class="error">Your UTR / Transaction ID was rejected.</div>';return;} if(order.status!=='approved'&&order.status!=='paid'){ $('result').innerHTML='<div class="pending"><b>Payment Pending Approval</b><br>Payment record mil gaya hai, lekin admin approval abhi pending hai.<br>Order: <code>'+esc(order.order_id)+'</code></div>';return;} const rows=credentialRows(items,'ID ');$('result').innerHTML='<div class="success"><b>Verified Purchase</b><br>Order: <code>'+esc(order.order_id)+'</code><div class="copy-all-wrap">'+copyAllButton(items,'📋 Copy All IDs & Passwords')+'</div>'+rows+'</div>'; }
 
 
-// Initialize storefront; Cloudflare Turnstile is required only when submitting UTR.
+// Start the site-wide Cloudflare gate as soon as the page DOM is ready.
 document.addEventListener('DOMContentLoaded',()=>{
   init();
 });

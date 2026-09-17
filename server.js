@@ -94,7 +94,7 @@ app.use(express.urlencoded({ extended: true, limit: '128kb', parameterLimit: 100
 app.use(cookieParser());
 app.use((req,res,next)=>{ if(req.path.startsWith('/api/')) res.set('Cache-Control','no-store'); next(); });
 
-// Serve the storefront with the Turnstile Site Key for UTR submission protection.
+// Serve the storefront with the Turnstile Site Key embedded for the first-load gate.
 app.get('/', (req,res)=>{
   try {
     const file=fs.readFileSync(path.join(__dirname,'public','index.html'),'utf8');
@@ -413,7 +413,7 @@ async function verifyTurnstile(token, req){
   }catch(e){ console.error('Turnstile verify error:',e); return {ok:false, reason:'Cloudflare verification unavailable'}; }
 }
 
-app.post('/api/orders/:orderId/utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{
+app.post('/api/orders/:orderId/utr', siteGate, rateLimit(apiHits,60*1000,20), async(req,res)=>{
   try{
     const cf=await verifyTurnstile(req.body?.turnstileToken,req);
     if(!cf.ok) return res.status(403).json({error:cf.reason});
