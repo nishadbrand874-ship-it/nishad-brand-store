@@ -130,7 +130,8 @@ async function startQrPayment(){
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'QR create failed');
     $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').href=d.upiLink||'#'; $('upiOpen').classList.toggle('hidden',!d.upiLink); $('payText').textContent=d.quantity+' ID — ₹'+money(Number(d.amount!=null?d.amount/100:selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.amount||0)/100)+'</b><br>QR scan karke payment karein. Payment ke baad UTR / Transaction ID neeche submit karein. Payment approval ke baad ID release hogi.'; $('utrBox').classList.remove('hidden'); setTimeout(initTurnstile,0);
     startCountdown(Number(d.expiresAt||Date.now()+300000));
-    window.currentOrderId=d.orderId; window.currentOrderToken=d.orderToken||''; pollTimer=setInterval(()=>checkQrStatus(d.orderId),1000); await checkQrStatus(d.orderId);
+    window.currentOrderId=d.orderId; window.currentOrderToken=d.orderToken||''; // Poll at a moderate interval so the public status endpoint never hits the per-IP rate limit during normal use.
+    pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000); await checkQrStatus(d.orderId);
   }catch(e){$('payStatus').innerHTML='<div class="error">'+esc(e.message)+'</div>';}
 }
 function openOfflineQueue(){
