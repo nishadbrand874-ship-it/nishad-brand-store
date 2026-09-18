@@ -529,6 +529,8 @@ app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(merchantSmsHits,
   try {
     const utr=String(req.body?.utr||'').trim().replace(/\s+/g,'').toUpperCase();
     const amountPaise=Number(req.body?.amount_paise);
+    const smsTimestampMs=Number(req.body?.sms_timestamp_ms);
+    const smsTime=Number.isSafeInteger(smsTimestampMs) && smsTimestampMs>0 ? new Date(smsTimestampMs) : new Date();
     if(!/^[A-Z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR'});
     if(!Number.isSafeInteger(amountPaise) || amountPaise<=0) return res.status(400).json({error:'Invalid amount'});
 
@@ -547,16 +549,21 @@ app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(merchantSmsHits,
       // recent pending order for that amount, the mismatch is unambiguous and
       // the website order can be rejected immediately. If several customers
       // have the same amount pending, do NOT guess which order is wrong.
-      const candidates=await q(`SELECT order_id,utr,amount_paise
+      const candidates=await q(`SELECT order_id,utr,amount_paise,
+          ABS(EXTRACT(EPOCH FROM (COALESCE(utr_submitted_at,created_at)-$3::timestamptz))) AS time_distance
         FROM orders
         WHERE status='payment_received'
           AND amount_paise=$1
           AND utr IS NOT NULL
           AND LOWER(utr)<>LOWER($2)
-          AND COALESCE(utr_submitted_at,created_at) >= NOW() - INTERVAL '30 minutes'
-        ORDER BY COALESCE(utr_submitted_at,created_at) DESC
-        LIMIT 2`,[amountPaise,utr]);
-      if(candidates.rows.length===1){
+          AND COALESCE(utr_submitted_at,created_at) >= $3::timestamptz - INTERVAL '30 minutes'
+          AND COALESCE(utr_submitted_at,created_at) <= $3::timestamptz + INTERVAL '10 minutes'
+        ORDER BY time_distance ASC
+        LIMIT 2`,[amountPaise,utr,smsTime.toISOString()]);
+      // The SMS timestamp lets us identify the order nearest to the real payment.
+      // Only auto-reject when there is one clear nearest candidate; never guess on a tie.
+      if(candidates.rows.length===1 ||
+         (candidates.rows.length===2 && Number(candidates.rows[0].time_distance) + 30 < Number(candidates.rows[1].time_distance))){
         const candidate=candidates.rows[0];
         await q("UPDATE orders SET status='rejected',sms_amount_paise=$1,sms_match_source='merchant_app_utr_mismatch' WHERE order_id=$2 AND status='payment_received'",[amountPaise,candidate.order_id]);
         await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='utr_mismatch' WHERE LOWER(utr)=LOWER($2)",[candidate.order_id,utr]);
