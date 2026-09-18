@@ -167,3 +167,7 @@ NISHAD BRAND storefront हर 3 सेकंड में `/api/config` से 
 - A reused UTR, wrong UTR, wrong amount, rejected order, or unknown UTR does not release inventory.
 - `MOBILE_APP_TOKEN` must be stored in Render Environment Variables and kept out of source control.
 - SMS is a reconciliation signal; for stronger payment assurance, pair this with a bank/PSP/gateway server-side transaction-status API.
+
+
+### V44.72 — UTR mismatch ordering fix
+Merchant SMS agar customer ke UTR submit karne se pehle server par aa chuka ho, to exact amount ke recent single SMS se submitted UTR mismatch hone par order turant reject hota hai. Multiple same-amount payments me system guess nahi karta.

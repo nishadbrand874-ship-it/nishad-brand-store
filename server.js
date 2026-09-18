@@ -502,7 +502,29 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(utrSubmitHits
       if(latest.rows[0]?.status==='payment_received') return res.json({ok:true,status:'pending_approval',order:latest.rows[0]});
       return res.status(400).json({error:'Order cannot accept UTR in its current state'});
     }
-    // If the Merchant Verify phone already received this UTR, reconcile it now.
+    // IMPORTANT: the merchant SMS may have arrived BEFORE the customer submitted
+    // the UTR. In that case there is no row for the customer's wrong UTR, so the
+    // old code could stay pending forever. Reconcile against a recent real SMS
+    // for the exact order amount first; if there is one unambiguous SMS and its
+    // UTR differs from the submitted UTR, reject this order immediately.
+    const recentSms=await q(`SELECT id,utr,amount_paise,received_at,match_status
+      FROM merchant_sms_verifications
+      WHERE amount_paise=$1
+        AND received_at >= $2::timestamptz - INTERVAL '30 minutes'
+        AND received_at <= $2::timestamptz + INTERVAL '10 minutes'
+        AND LOWER(utr)<>LOWER($3)
+      ORDER BY ABS(EXTRACT(EPOCH FROM (received_at-$2::timestamptz))) ASC
+      LIMIT 2`,[r.rows[0].amount_paise,r.rows[0].utr_submitted_at,utr]);
+    if(recentSms.rows.length===1){
+      // A single recent SMS for the exact order amount is enough to prove the
+      // submitted UTR is wrong. Multiple SMS rows remain ambiguous.
+        const sv=recentSms.rows[0];
+        await q("UPDATE orders SET status='rejected',sms_amount_paise=$1,sms_match_source='merchant_app_utr_mismatch_preexisting_sms' WHERE order_id=$2 AND status='payment_received'",[sv.amount_paise,orderId]);
+        await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='utr_mismatch' WHERE id=$2",[orderId,sv.id]);
+        return res.status(409).json({ok:false,status:'rejected',reason:'utr_mismatch',submitted_utr:utr,verified_utr:sv.utr,order_id:orderId,amount_paise:Number(sv.amount_paise),message:'Submitted UTR does not match the payment SMS UTR. Order rejected; no ID was released.'});
+    }
+
+    // If the Merchant Verify phone already received this exact submitted UTR, reconcile it now.
     const sms=await q('SELECT * FROM merchant_sms_verifications WHERE LOWER(utr)=LOWER($1) LIMIT 1',[utr]);
     if(sms.rows[0]){
       const sv=sms.rows[0];
