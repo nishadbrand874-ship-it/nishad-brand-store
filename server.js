@@ -127,6 +127,10 @@ const loginIpAttempts=new Map();
 const apiHits=new Map();
 const claimHits=new Map();
 const adminMutationHits=new Map();
+const utrSubmitHits=new Map();
+const qrStatusHits=new Map();
+const merchantSmsHits=new Map();
+const orderCheckHits=new Map();
 function clientIp(req){ return String(req.ip||'unknown').slice(0,100); }
 function rateLimit(map,windowMs,max,code='Too many requests. Please try again later.'){
   return (req,res,next)=>{
@@ -155,7 +159,7 @@ function recordLoginFailure(key,ip){
   if(ip){ const b=loginIpAttempts.get(ip); if(!b || now-b.first>=10*60*1000) loginIpAttempts.set(ip,{first:now,count:1}); else b.count++; }
 }
 function clearLoginFailures(key,ip){loginAttempts.delete(key); if(ip) loginIpAttempts.delete(ip);}
-setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of loginIpAttempts) if(now-v.first>10*60*1000) loginIpAttempts.delete(k); for(const [k,v] of apiHits) if(now-v.first>60*1000) apiHits.delete(k); for(const [k,v] of claimHits) if(now-v.first>10*60*1000) claimHits.delete(k); for(const [k,v] of adminMutationHits) if(now-v.first>60*1000) adminMutationHits.delete(k); },5*60*1000).unref();
+setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of loginIpAttempts) if(now-v.first>10*60*1000) loginIpAttempts.delete(k); for(const [k,v] of apiHits) if(now-v.first>60*1000) apiHits.delete(k); for(const [k,v] of utrSubmitHits) if(now-v.first>60*1000) utrSubmitHits.delete(k); for(const [k,v] of qrStatusHits) if(now-v.first>60*1000) qrStatusHits.delete(k); for(const [k,v] of merchantSmsHits) if(now-v.first>60*1000) merchantSmsHits.delete(k); for(const [k,v] of orderCheckHits) if(now-v.first>60*1000) orderCheckHits.delete(k); for(const [k,v] of claimHits) if(now-v.first>10*60*1000) claimHits.delete(k); for(const [k,v] of adminMutationHits) if(now-v.first>60*1000) adminMutationHits.delete(k); },5*60*1000).unref();
 
 
 function siteGate(req,res,next){
@@ -447,6 +451,19 @@ async function verifyTurnstile(token, req){
 }
 
 async function utrCloudflareGuard(req,res,next){
+  // Offline-friendly UTR retry: a valid per-order secret is sufficient for
+  // a queued UTR submission. This lets a browser save the UTR while offline
+  // and submit it when connectivity returns, without weakening access to
+  // other orders or exposing inventory credentials.
+  try {
+    const orderId=String(req.params?.orderId||'').trim();
+    const orderToken=String(req.get('X-Order-Token')||'').trim();
+    if(orderId && orderToken){
+      const ord=await q('SELECT order_id,qr_code_id FROM orders WHERE order_id=$1',[orderId]);
+      if(ord.rows[0] && verifyOrderToken(ord.rows[0],orderToken)) return next();
+    }
+  } catch {}
+
   // Prefer the already-issued site gate cookie. If it is missing, verify the
   // Turnstile token submitted by the UTR form and issue the gate cookie here.
   try {
@@ -464,7 +481,7 @@ async function utrCloudflareGuard(req,res,next){
   next();
 }
 
-app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*1000,20), async(req,res)=>{
+app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(utrSubmitHits,60*1000,12), async(req,res)=>{
   try{
     const orderId=String(req.params.orderId||'').trim();
     const orderToken=String(req.headers['x-order-token']||'').trim();
@@ -476,7 +493,7 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*10
     if(!verifyOrderToken(order,orderToken)) return res.status(403).json({error:'Invalid order session'});
     if(order.status==='approved' || order.status==='paid') return res.json({ok:true,status:'approved',...await getOrderItems(orderId)});
     if(order.status==='rejected') return res.status(400).json({error:'This order was rejected'});
-    if(Date.now() > new Date(order.created_at).getTime()+300000) return res.status(410).json({error:'QR expired. Please start a new order.'});
+    if(Date.now() > new Date(order.created_at).getTime()+30*60*1000) return res.status(410).json({error:'Offline UTR grace period expired. Please start a new order.'});
     const duplicate=await q('SELECT order_id,status FROM orders WHERE LOWER(utr)=LOWER($1) AND order_id<>$2 LIMIT 1',[utr,orderId]);
     if(duplicate.rows[0]) return res.status(409).json({error:'This UTR is already submitted for another order'});
     const r=await q("UPDATE orders SET status='payment_received',utr=$1,utr_submitted_at=NOW() WHERE order_id=$2 AND status='created' RETURNING order_id,utr,package_qty,amount_paise,status,utr_submitted_at",[utr,orderId]);
@@ -508,7 +525,7 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*10
   }
 });
 
-app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(apiHits,60*1000,60), async(req,res)=>{
+app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(merchantSmsHits,60*1000,120), async(req,res)=>{
   try {
     const utr=String(req.body?.utr||'').trim().replace(/\s+/g,'').toUpperCase();
     const amountPaise=Number(req.body?.amount_paise);
@@ -532,9 +549,12 @@ app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(apiHits,60*1000,
     }
     if(order.status==='approved' || order.status==='paid') return res.json({ok:true,status:'already_approved',order_id:order.order_id});
     if(Number(order.amount_paise)!==amountPaise){
-      await q("UPDATE orders SET sms_amount_paise=$1,sms_match_source='merchant_app_amount_mismatch' WHERE order_id=$2",[amountPaise,order.order_id]);
+      // A real SMS UTR exists but the paid amount does not match this order.
+      // Reject the order immediately so a mismatched payment can never remain
+      // pending and later receive an ID.
+      await q("UPDATE orders SET status='rejected',sms_amount_paise=$1,sms_match_source='merchant_app_amount_mismatch' WHERE order_id=$2 AND status='payment_received'",[amountPaise,order.order_id]);
       await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='amount_mismatch' WHERE LOWER(utr)=LOWER($2)",[order.order_id,utr]);
-      return res.status(409).json({ok:false,status:'amount_mismatch',expected_amount_paise:Number(order.amount_paise),received_amount_paise:amountPaise});
+      return res.status(409).json({ok:false,status:'rejected',reason:'amount_mismatch',expected_amount_paise:Number(order.amount_paise),received_amount_paise:amountPaise});
     }
 
     await q("UPDATE orders SET sms_verified_at=NOW(),sms_amount_paise=$1,sms_match_source='merchant_sms_app' WHERE order_id=$2 AND status='payment_received'",[amountPaise,order.order_id]);
@@ -549,7 +569,7 @@ app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(apiHits,60*1000,
   }
 });
 
-app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(req,res)=>{
+app.get('/api/payment/qr-status/:orderId', rateLimit(qrStatusHits,60*1000,120), async(req,res)=>{
   try{
     const ord=await q('SELECT order_id,qr_code_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
@@ -564,17 +584,17 @@ app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(
   }catch(e){console.error('Manual QR status error:',e);res.status(500).json({error:e.message||'Could not check order'});}
 });
 
-// Strict UTR verification: an order submitted with a UTR must receive a matching
-// merchant SMS (UTR + exact amount) within the verification window. Otherwise
-// it is rejected automatically and no ID can be released.
-const UTR_VERIFY_WINDOW_MS = 90 * 1000;
+// Offline-tolerant UTR verification: a submitted UTR gets a 30-minute
+// reconciliation window so temporary mobile-network loss does not cause an
+// otherwise valid payment to be rejected before the Merchant Verify app can sync.
+const UTR_VERIFY_WINDOW_MS = 30 * 60 * 1000;
 async function autoRejectUnverifiedOrders(){
   try{
     await q(`UPDATE orders SET status='rejected'
       WHERE status='payment_received'
         AND utr IS NOT NULL
         AND sms_verified_at IS NULL
-        AND COALESCE(utr_submitted_at, created_at) < NOW() - INTERVAL '90 seconds'`);
+        AND COALESCE(utr_submitted_at, created_at) < NOW() - INTERVAL '30 minutes'`);
   }catch(e){ console.error('Auto reject unverified UTRs:',e.message); }
 }
 setInterval(autoRejectUnverifiedOrders, 15000);
@@ -681,7 +701,7 @@ app.post('/api/admin/manual-bonus-release/:utr',auth,adminMutationGuard,async(re
   }catch(e){try{await client.query('ROLLBACK')}catch{};console.error('Manual bonus release error:',e);res.status(500).json({error:'Could not manually release bonus ID'});}finally{client.release();}
 });
 
-app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
+app.get('/api/order-check/:utr', rateLimit(orderCheckHits,60*1000,30), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
 
 app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile(path.join(__dirname,'public','admin.html')); });
 
