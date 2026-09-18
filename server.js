@@ -541,7 +541,29 @@ app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(merchantSmsHits,
     }
 
     const ord=await q('SELECT * FROM orders WHERE LOWER(utr)=LOWER($1) ORDER BY created_at DESC LIMIT 1',[utr]);
-    if(!ord.rows[0]) return res.json({ok:true,status:'waiting_for_website_utr',utr,amount_paise:amountPaise});
+    if(!ord.rows[0]) {
+      // The merchant app has seen a real payment for this exact amount, but
+      // the customer has submitted a different UTR. When there is exactly one
+      // recent pending order for that amount, the mismatch is unambiguous and
+      // the website order can be rejected immediately. If several customers
+      // have the same amount pending, do NOT guess which order is wrong.
+      const candidates=await q(`SELECT order_id,utr,amount_paise
+        FROM orders
+        WHERE status='payment_received'
+          AND amount_paise=$1
+          AND utr IS NOT NULL
+          AND LOWER(utr)<>LOWER($2)
+          AND COALESCE(utr_submitted_at,created_at) >= NOW() - INTERVAL '30 minutes'
+        ORDER BY COALESCE(utr_submitted_at,created_at) DESC
+        LIMIT 2`,[amountPaise,utr]);
+      if(candidates.rows.length===1){
+        const candidate=candidates.rows[0];
+        await q("UPDATE orders SET status='rejected',sms_amount_paise=$1,sms_match_source='merchant_app_utr_mismatch' WHERE order_id=$2 AND status='payment_received'",[amountPaise,candidate.order_id]);
+        await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='utr_mismatch' WHERE LOWER(utr)=LOWER($2)",[candidate.order_id,utr]);
+        return res.status(409).json({ok:false,status:'rejected',reason:'utr_mismatch',submitted_utr:candidate.utr,verified_utr:utr,order_id:candidate.order_id,amount_paise:amountPaise,message:'Submitted UTR does not match the payment SMS UTR. Order rejected; no ID was released.'});
+      }
+      return res.json({ok:true,status:'waiting_for_website_utr',utr,amount_paise:amountPaise});
+    }
     const order=ord.rows[0];
     if(order.status==='rejected') {
       await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='rejected_order' WHERE LOWER(utr)=LOWER($2)",[order.order_id,utr]);
