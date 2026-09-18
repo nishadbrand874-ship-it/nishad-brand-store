@@ -447,6 +447,19 @@ async function verifyTurnstile(token, req){
 }
 
 async function utrCloudflareGuard(req,res,next){
+  // Offline-friendly UTR retry: a valid per-order secret is sufficient for
+  // a queued UTR submission. This lets a browser save the UTR while offline
+  // and submit it when connectivity returns, without weakening access to
+  // other orders or exposing inventory credentials.
+  try {
+    const orderId=String(req.params?.orderId||'').trim();
+    const orderToken=String(req.get('X-Order-Token')||'').trim();
+    if(orderId && orderToken){
+      const ord=await q('SELECT order_id,qr_code_id FROM orders WHERE order_id=$1',[orderId]);
+      if(ord.rows[0] && verifyOrderToken(ord.rows[0],orderToken)) return next();
+    }
+  } catch {}
+
   // Prefer the already-issued site gate cookie. If it is missing, verify the
   // Turnstile token submitted by the UTR form and issue the gate cookie here.
   try {
@@ -476,7 +489,7 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*10
     if(!verifyOrderToken(order,orderToken)) return res.status(403).json({error:'Invalid order session'});
     if(order.status==='approved' || order.status==='paid') return res.json({ok:true,status:'approved',...await getOrderItems(orderId)});
     if(order.status==='rejected') return res.status(400).json({error:'This order was rejected'});
-    if(Date.now() > new Date(order.created_at).getTime()+300000) return res.status(410).json({error:'QR expired. Please start a new order.'});
+    if(Date.now() > new Date(order.created_at).getTime()+30*60*1000) return res.status(410).json({error:'Offline UTR grace period expired. Please start a new order.'});
     const duplicate=await q('SELECT order_id,status FROM orders WHERE LOWER(utr)=LOWER($1) AND order_id<>$2 LIMIT 1',[utr,orderId]);
     if(duplicate.rows[0]) return res.status(409).json({error:'This UTR is already submitted for another order'});
     const r=await q("UPDATE orders SET status='payment_received',utr=$1,utr_submitted_at=NOW() WHERE order_id=$2 AND status='created' RETURNING order_id,utr,package_qty,amount_paise,status,utr_submitted_at",[utr,orderId]);
@@ -532,9 +545,12 @@ app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(apiHits,60*1000,
     }
     if(order.status==='approved' || order.status==='paid') return res.json({ok:true,status:'already_approved',order_id:order.order_id});
     if(Number(order.amount_paise)!==amountPaise){
-      await q("UPDATE orders SET sms_amount_paise=$1,sms_match_source='merchant_app_amount_mismatch' WHERE order_id=$2",[amountPaise,order.order_id]);
+      // A real SMS UTR exists but the paid amount does not match this order.
+      // Reject the order immediately so a mismatched payment can never remain
+      // pending and later receive an ID.
+      await q("UPDATE orders SET status='rejected',sms_amount_paise=$1,sms_match_source='merchant_app_amount_mismatch' WHERE order_id=$2 AND status='payment_received'",[amountPaise,order.order_id]);
       await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='amount_mismatch' WHERE LOWER(utr)=LOWER($2)",[order.order_id,utr]);
-      return res.status(409).json({ok:false,status:'amount_mismatch',expected_amount_paise:Number(order.amount_paise),received_amount_paise:amountPaise});
+      return res.status(409).json({ok:false,status:'rejected',reason:'amount_mismatch',expected_amount_paise:Number(order.amount_paise),received_amount_paise:amountPaise});
     }
 
     await q("UPDATE orders SET sms_verified_at=NOW(),sms_amount_paise=$1,sms_match_source='merchant_sms_app' WHERE order_id=$2 AND status='payment_received'",[amountPaise,order.order_id]);
@@ -564,17 +580,17 @@ app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(
   }catch(e){console.error('Manual QR status error:',e);res.status(500).json({error:e.message||'Could not check order'});}
 });
 
-// Strict UTR verification: an order submitted with a UTR must receive a matching
-// merchant SMS (UTR + exact amount) within the verification window. Otherwise
-// it is rejected automatically and no ID can be released.
-const UTR_VERIFY_WINDOW_MS = 90 * 1000;
+// Offline-tolerant UTR verification: a submitted UTR gets a 30-minute
+// reconciliation window so temporary mobile-network loss does not cause an
+// otherwise valid payment to be rejected before the Merchant Verify app can sync.
+const UTR_VERIFY_WINDOW_MS = 30 * 60 * 1000;
 async function autoRejectUnverifiedOrders(){
   try{
     await q(`UPDATE orders SET status='rejected'
       WHERE status='payment_received'
         AND utr IS NOT NULL
         AND sms_verified_at IS NULL
-        AND COALESCE(utr_submitted_at, created_at) < NOW() - INTERVAL '90 seconds'`);
+        AND COALESCE(utr_submitted_at, created_at) < NOW() - INTERVAL '30 minutes'`);
   }catch(e){ console.error('Auto reject unverified UTRs:',e.message); }
 }
 setInterval(autoRejectUnverifiedOrders, 15000);
