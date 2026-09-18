@@ -1,5 +1,5 @@
 'use strict';
-let config=null, selected=null, pollTimer=null, countdownTimer=null, storeRefreshTimer=null, storeRefreshBusy=false, turnstileWidgetId=null, offlineFlushTimer=null;
+let config=null, selected=null, pollTimer=null, countdownTimer=null, storeRefreshTimer=null, storeRefreshBusy=false, turnstileWidgetId=null;
 const $=id=>document.getElementById(id);
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 function money(n){return Number(n||0).toLocaleString('en-IN');}
@@ -130,61 +130,31 @@ async function startQrPayment(){
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'QR create failed');
     $('qrImage').src=d.qrImage; $('qrDownload').href=d.qrImage; $('qrDownload').classList.remove('hidden'); $('upiOpen').href=d.upiLink||'#'; $('upiOpen').classList.toggle('hidden',!d.upiLink); $('payText').textContent=d.quantity+' ID — ₹'+money(Number(d.amount!=null?d.amount/100:selected.price||0)); $('qrBox').classList.remove('hidden'); $('payStatus').innerHTML='<b>QR ready — ₹'+money(Number(d.amount||0)/100)+'</b><br>QR scan karke payment karein. Payment ke baad UTR / Transaction ID neeche submit karein. Payment approval ke baad ID release hogi.'; $('utrBox').classList.remove('hidden'); setTimeout(initTurnstile,0);
     startCountdown(Number(d.expiresAt||Date.now()+300000));
-    window.currentOrderId=d.orderId; window.currentOrderToken=d.orderToken||''; pollTimer=setInterval(()=>checkQrStatus(d.orderId),1000); await checkQrStatus(d.orderId);
+    window.currentOrderId=d.orderId; window.currentOrderToken=d.orderToken||''; pollTimer=setInterval(()=>checkQrStatus(d.orderId),3000); await checkQrStatus(d.orderId);
   }catch(e){$('payStatus').innerHTML='<div class="error">'+esc(e.message)+'</div>';}
-}
-function openOfflineQueue(){
-  try { const raw=localStorage.getItem('nishad_offline_utr_queue_v1'); return raw?JSON.parse(raw):[]; } catch { return []; }
-}
-function saveOfflineQueue(list){ try { localStorage.setItem('nishad_offline_utr_queue_v1',JSON.stringify(list)); } catch {} }
-function queueOfflineUTR(orderId,orderToken,utr){
-  const list=openOfflineQueue().filter(x=>x.orderId!==orderId);
-  list.push({orderId,orderToken,utr,queuedAt:Date.now()});
-  saveOfflineQueue(list);
-  try { navigator.serviceWorker?.ready.then(r=>r.sync?.register('nishad-utr-sync')).catch(()=>{}); } catch {}
-}
-async function flushOfflineUTRs(){
-  const list=openOfflineQueue(); if(!list.length || !navigator.onLine) return;
-  const keep=[];
-  for(const item of list){
-    try{
-      const r=await fetch('/api/orders/'+encodeURIComponent(item.orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':String(item.orderToken||'')},body:JSON.stringify({utr:item.utr})});
-      const d=await r.json().catch(()=>({}));
-      if(!r.ok){ if(r.status===409 || r.status===410 || r.status===403 || r.status===400) { continue; } keep.push(item); continue; }
-      if(window.currentOrderId===item.orderId){ $('utrInput').value=item.utr; $('utrBtn').disabled=true; $('utrMsg').innerHTML='<div class="pending"><b>UTR submitted automatically ✓</b><br>Internet वापस आते ही saved UTR server पर submit हो गया. Payment SMS + exact amount match होने पर ID release होगी.</div>'; await checkQrStatus(item.orderId); }
-    }catch{ keep.push(item); }
-  }
-  saveOfflineQueue(keep);
 }
 async function submitUTR(){
   const utr=$('utrInput').value.trim();
   if(!/^[A-Za-z0-9]{8,35}$/.test(utr)){$('utrMsg').innerHTML='<div class="error">UTR / Transaction ID 8–35 letters/digits का होना चाहिए.</div>';return;}
   const orderId=window.currentOrderId;
-  const orderToken=String(window.currentOrderToken||'');
-  if(!orderId || !orderToken){$('utrMsg').innerHTML='<div class="error">Order session नहीं मिला. Buy Now फिर से करें.</div>';return;}
+  if(!orderId){$('utrMsg').innerHTML='<div class="error">Order session नहीं मिला. Buy Now फिर से करें.</div>';return;}
   $('utrBtn').disabled=true;$('utrMsg').textContent='Submitting…';
   try{
-    if(!navigator.onLine) throw new Error('OFFLINE_QUEUE');
-    const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':orderToken},body:JSON.stringify({utr,turnstileToken:getTurnstileToken()})});
+    const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':String(window.currentOrderToken||'')},body:JSON.stringify({utr,turnstileToken:getTurnstileToken()})});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'UTR submit failed');
-    $('utrMsg').innerHTML='<div class="pending"><b>UTR received — matching payment check ho raha hai…</b><br>Exact UTR + exact amount match hote hi ID automatically release hogi.</div>';
-    $('utrBtn').disabled=true; resetTurnstile(); await checkQrStatus(orderId);
-  }catch(e){
-    if(e.message==='OFFLINE_QUEUE' || !navigator.onLine || e instanceof TypeError){
-      queueOfflineUTR(orderId,orderToken,utr);
-      $('utrMsg').innerHTML='<div class="pending"><b>📴 Internet बंद है — UTR सुरक्षित रूप से save हो गया.</b><br>Internet वापस आते ही UTR automatically submit होगा. Temporary network loss की वजह से order reject नहीं होगा.</div>';
-      $('utrBtn').disabled=true; return;
-    }
-    $('utrMsg').innerHTML='<div class="error">'+esc(e.message)+'</div>';$('utrBtn').disabled=false;resetTurnstile();
-  }
+    $('utrMsg').innerHTML='<div class="pending"><b>UTR submitted for verification.</b><br>Actual payment SMS ke UTR + exact amount match hone par hi ID release hogi. Match na hone par order reject ho jayega.</div>';
+    $('utrBtn').disabled=true;
+    resetTurnstile();
+    await checkQrStatus(orderId);
+  }catch(e){$('utrMsg').innerHTML='<div class="error">'+esc(e.message)+'</div>';$('utrBtn').disabled=false;resetTurnstile();}
 }
 async function checkQrStatus(orderId){
   try{
     const r=await fetch('/api/payment/qr-status/'+encodeURIComponent(orderId),{cache:'no-store',headers:{'X-Order-Token':String(window.currentOrderToken||'')}}); const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Verification failed');
     if(d.status==='approved' || d.status==='paid'){stopPolling();$('utrMsg').innerHTML='<div class="success"><b>✅ PAYMENT APPROVED</b><br>Aapki payment approve ho gayi hai. Neeche ID delivery ho gayi hai.</div>';showIDs(d.items,d.order);return;}
-    if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="pending"><b>Payment verification pending</b><br>Merchant Verify app UTR + exact amount match kar raha hai. Match hote hi ID automatically release hogi.<br><small>Verification live check ho rahi hai.</small></div>'; return; }
+    if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="pending"><b>Payment verification pending</b><br>Merchant Verify app se UTR + exact amount match hone ka wait hai. Match na hone par order automatically reject hoga.<br><small>Payment details securely hidden.</small></div>'; return; }
     if(d.status==='rejected'){ stopPolling(); const msg='<div class="error">Your UTR / Transaction ID was rejected.</div>'; $('payStatus').innerHTML=msg; $('utrMsg').innerHTML=msg; return; }if(d.status==='expired'){stopPolling();$('payStatus').innerHTML='<div class="error">QR expired. Please click Buy Now again to generate a new QR.</div>';return;}
   }catch(e){console.warn(e);}
 }
@@ -216,13 +186,8 @@ function showCheck(items,order){if(order.status==='rejected'){ $('result').inner
 
 
 // Start the site-wide Cloudflare gate as soon as the page DOM is ready.
-navigator.serviceWorker?.addEventListener('message',e=>{ if(e.data?.type==='NISHAD_FLUSH_UTR') flushOfflineUTRs(); });
 document.addEventListener('DOMContentLoaded',()=>{
   init();
-  window.addEventListener('online',flushOfflineUTRs);
-  flushOfflineUTRs();
-  offlineFlushTimer=setInterval(flushOfflineUTRs,15000);
-  if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 });
 
 
