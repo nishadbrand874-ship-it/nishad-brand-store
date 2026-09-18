@@ -127,10 +127,6 @@ const loginIpAttempts=new Map();
 const apiHits=new Map();
 const claimHits=new Map();
 const adminMutationHits=new Map();
-const utrSubmitHits=new Map();
-const qrStatusHits=new Map();
-const merchantSmsHits=new Map();
-const orderCheckHits=new Map();
 function clientIp(req){ return String(req.ip||'unknown').slice(0,100); }
 function rateLimit(map,windowMs,max,code='Too many requests. Please try again later.'){
   return (req,res,next)=>{
@@ -159,7 +155,7 @@ function recordLoginFailure(key,ip){
   if(ip){ const b=loginIpAttempts.get(ip); if(!b || now-b.first>=10*60*1000) loginIpAttempts.set(ip,{first:now,count:1}); else b.count++; }
 }
 function clearLoginFailures(key,ip){loginAttempts.delete(key); if(ip) loginIpAttempts.delete(ip);}
-setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of loginIpAttempts) if(now-v.first>10*60*1000) loginIpAttempts.delete(k); for(const [k,v] of apiHits) if(now-v.first>60*1000) apiHits.delete(k); for(const [k,v] of utrSubmitHits) if(now-v.first>60*1000) utrSubmitHits.delete(k); for(const [k,v] of qrStatusHits) if(now-v.first>60*1000) qrStatusHits.delete(k); for(const [k,v] of merchantSmsHits) if(now-v.first>60*1000) merchantSmsHits.delete(k); for(const [k,v] of orderCheckHits) if(now-v.first>60*1000) orderCheckHits.delete(k); for(const [k,v] of claimHits) if(now-v.first>10*60*1000) claimHits.delete(k); for(const [k,v] of adminMutationHits) if(now-v.first>60*1000) adminMutationHits.delete(k); },5*60*1000).unref();
+setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of loginIpAttempts) if(now-v.first>10*60*1000) loginIpAttempts.delete(k); for(const [k,v] of apiHits) if(now-v.first>60*1000) apiHits.delete(k); for(const [k,v] of claimHits) if(now-v.first>10*60*1000) claimHits.delete(k); for(const [k,v] of adminMutationHits) if(now-v.first>60*1000) adminMutationHits.delete(k); },5*60*1000).unref();
 
 
 function siteGate(req,res,next){
@@ -451,19 +447,6 @@ async function verifyTurnstile(token, req){
 }
 
 async function utrCloudflareGuard(req,res,next){
-  // Offline-friendly UTR retry: a valid per-order secret is sufficient for
-  // a queued UTR submission. This lets a browser save the UTR while offline
-  // and submit it when connectivity returns, without weakening access to
-  // other orders or exposing inventory credentials.
-  try {
-    const orderId=String(req.params?.orderId||'').trim();
-    const orderToken=String(req.get('X-Order-Token')||'').trim();
-    if(orderId && orderToken){
-      const ord=await q('SELECT order_id,qr_code_id FROM orders WHERE order_id=$1',[orderId]);
-      if(ord.rows[0] && verifyOrderToken(ord.rows[0],orderToken)) return next();
-    }
-  } catch {}
-
   // Prefer the already-issued site gate cookie. If it is missing, verify the
   // Turnstile token submitted by the UTR form and issue the gate cookie here.
   try {
@@ -481,7 +464,7 @@ async function utrCloudflareGuard(req,res,next){
   next();
 }
 
-app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(utrSubmitHits,60*1000,12), async(req,res)=>{
+app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*1000,20), async(req,res)=>{
   try{
     const orderId=String(req.params.orderId||'').trim();
     const orderToken=String(req.headers['x-order-token']||'').trim();
@@ -493,7 +476,7 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(utrSubmitHits
     if(!verifyOrderToken(order,orderToken)) return res.status(403).json({error:'Invalid order session'});
     if(order.status==='approved' || order.status==='paid') return res.json({ok:true,status:'approved',...await getOrderItems(orderId)});
     if(order.status==='rejected') return res.status(400).json({error:'This order was rejected'});
-    if(Date.now() > new Date(order.created_at).getTime()+30*60*1000) return res.status(410).json({error:'Offline UTR grace period expired. Please start a new order.'});
+    if(Date.now() > new Date(order.created_at).getTime()+300000) return res.status(410).json({error:'QR expired. Please start a new order.'});
     const duplicate=await q('SELECT order_id,status FROM orders WHERE LOWER(utr)=LOWER($1) AND order_id<>$2 LIMIT 1',[utr,orderId]);
     if(duplicate.rows[0]) return res.status(409).json({error:'This UTR is already submitted for another order'});
     const r=await q("UPDATE orders SET status='payment_received',utr=$1,utr_submitted_at=NOW() WHERE order_id=$2 AND status='created' RETURNING order_id,utr,package_qty,amount_paise,status,utr_submitted_at",[utr,orderId]);
@@ -502,29 +485,7 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(utrSubmitHits
       if(latest.rows[0]?.status==='payment_received') return res.json({ok:true,status:'pending_approval',order:latest.rows[0]});
       return res.status(400).json({error:'Order cannot accept UTR in its current state'});
     }
-    // IMPORTANT: the merchant SMS may have arrived BEFORE the customer submitted
-    // the UTR. In that case there is no row for the customer's wrong UTR, so the
-    // old code could stay pending forever. Reconcile against a recent real SMS
-    // for the exact order amount first; if there is one unambiguous SMS and its
-    // UTR differs from the submitted UTR, reject this order immediately.
-    const recentSms=await q(`SELECT id,utr,amount_paise,received_at,match_status
-      FROM merchant_sms_verifications
-      WHERE amount_paise=$1
-        AND received_at >= $2::timestamptz - INTERVAL '30 minutes'
-        AND received_at <= $2::timestamptz + INTERVAL '10 minutes'
-        AND LOWER(utr)<>LOWER($3)
-      ORDER BY ABS(EXTRACT(EPOCH FROM (received_at-$2::timestamptz))) ASC
-      LIMIT 2`,[r.rows[0].amount_paise,r.rows[0].utr_submitted_at,utr]);
-    if(recentSms.rows.length===1){
-      // A single recent SMS for the exact order amount is enough to prove the
-      // submitted UTR is wrong. Multiple SMS rows remain ambiguous.
-        const sv=recentSms.rows[0];
-        await q("UPDATE orders SET status='rejected',sms_amount_paise=$1,sms_match_source='merchant_app_utr_mismatch_preexisting_sms' WHERE order_id=$2 AND status='payment_received'",[sv.amount_paise,orderId]);
-        await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='utr_mismatch' WHERE id=$2",[orderId,sv.id]);
-        return res.status(409).json({ok:false,status:'rejected',reason:'utr_mismatch',submitted_utr:utr,verified_utr:sv.utr,order_id:orderId,amount_paise:Number(sv.amount_paise),message:'Submitted UTR does not match the payment SMS UTR. Order rejected; no ID was released.'});
-    }
-
-    // If the Merchant Verify phone already received this exact submitted UTR, reconcile it now.
+    // If the Merchant Verify phone already received this UTR, reconcile it now.
     const sms=await q('SELECT * FROM merchant_sms_verifications WHERE LOWER(utr)=LOWER($1) LIMIT 1',[utr]);
     if(sms.rows[0]){
       const sv=sms.rows[0];
@@ -547,12 +508,10 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(utrSubmitHits
   }
 });
 
-app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(merchantSmsHits,60*1000,120), async(req,res)=>{
+app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(apiHits,60*1000,60), async(req,res)=>{
   try {
     const utr=String(req.body?.utr||'').trim().replace(/\s+/g,'').toUpperCase();
     const amountPaise=Number(req.body?.amount_paise);
-    const smsTimestampMs=Number(req.body?.sms_timestamp_ms);
-    const smsTime=Number.isSafeInteger(smsTimestampMs) && smsTimestampMs>0 ? new Date(smsTimestampMs) : new Date();
     if(!/^[A-Z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR'});
     if(!Number.isSafeInteger(amountPaise) || amountPaise<=0) return res.status(400).json({error:'Invalid amount'});
 
@@ -565,34 +524,7 @@ app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(merchantSmsHits,
     }
 
     const ord=await q('SELECT * FROM orders WHERE LOWER(utr)=LOWER($1) ORDER BY created_at DESC LIMIT 1',[utr]);
-    if(!ord.rows[0]) {
-      // The merchant app has seen a real payment for this exact amount, but
-      // the customer has submitted a different UTR. When there is exactly one
-      // recent pending order for that amount, the mismatch is unambiguous and
-      // the website order can be rejected immediately. If several customers
-      // have the same amount pending, do NOT guess which order is wrong.
-      const candidates=await q(`SELECT order_id,utr,amount_paise,
-          ABS(EXTRACT(EPOCH FROM (COALESCE(utr_submitted_at,created_at)-$3::timestamptz))) AS time_distance
-        FROM orders
-        WHERE status='payment_received'
-          AND amount_paise=$1
-          AND utr IS NOT NULL
-          AND LOWER(utr)<>LOWER($2)
-          AND COALESCE(utr_submitted_at,created_at) >= $3::timestamptz - INTERVAL '30 minutes'
-          AND COALESCE(utr_submitted_at,created_at) <= $3::timestamptz + INTERVAL '10 minutes'
-        ORDER BY time_distance ASC
-        LIMIT 2`,[amountPaise,utr,smsTime.toISOString()]);
-      // The SMS timestamp lets us identify the order nearest to the real payment.
-      // Only auto-reject when there is one clear nearest candidate; never guess on a tie.
-      if(candidates.rows.length===1 ||
-         (candidates.rows.length===2 && Number(candidates.rows[0].time_distance) + 30 < Number(candidates.rows[1].time_distance))){
-        const candidate=candidates.rows[0];
-        await q("UPDATE orders SET status='rejected',sms_amount_paise=$1,sms_match_source='merchant_app_utr_mismatch' WHERE order_id=$2 AND status='payment_received'",[amountPaise,candidate.order_id]);
-        await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='utr_mismatch' WHERE LOWER(utr)=LOWER($2)",[candidate.order_id,utr]);
-        return res.status(409).json({ok:false,status:'rejected',reason:'utr_mismatch',submitted_utr:candidate.utr,verified_utr:utr,order_id:candidate.order_id,amount_paise:amountPaise,message:'Submitted UTR does not match the payment SMS UTR. Order rejected; no ID was released.'});
-      }
-      return res.json({ok:true,status:'waiting_for_website_utr',utr,amount_paise:amountPaise});
-    }
+    if(!ord.rows[0]) return res.json({ok:true,status:'waiting_for_website_utr',utr,amount_paise:amountPaise});
     const order=ord.rows[0];
     if(order.status==='rejected') {
       await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='rejected_order' WHERE LOWER(utr)=LOWER($2)",[order.order_id,utr]);
@@ -600,12 +532,9 @@ app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(merchantSmsHits,
     }
     if(order.status==='approved' || order.status==='paid') return res.json({ok:true,status:'already_approved',order_id:order.order_id});
     if(Number(order.amount_paise)!==amountPaise){
-      // A real SMS UTR exists but the paid amount does not match this order.
-      // Reject the order immediately so a mismatched payment can never remain
-      // pending and later receive an ID.
-      await q("UPDATE orders SET status='rejected',sms_amount_paise=$1,sms_match_source='merchant_app_amount_mismatch' WHERE order_id=$2 AND status='payment_received'",[amountPaise,order.order_id]);
+      await q("UPDATE orders SET sms_amount_paise=$1,sms_match_source='merchant_app_amount_mismatch' WHERE order_id=$2",[amountPaise,order.order_id]);
       await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='amount_mismatch' WHERE LOWER(utr)=LOWER($2)",[order.order_id,utr]);
-      return res.status(409).json({ok:false,status:'rejected',reason:'amount_mismatch',expected_amount_paise:Number(order.amount_paise),received_amount_paise:amountPaise});
+      return res.status(409).json({ok:false,status:'amount_mismatch',expected_amount_paise:Number(order.amount_paise),received_amount_paise:amountPaise});
     }
 
     await q("UPDATE orders SET sms_verified_at=NOW(),sms_amount_paise=$1,sms_match_source='merchant_sms_app' WHERE order_id=$2 AND status='payment_received'",[amountPaise,order.order_id]);
@@ -620,7 +549,7 @@ app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(merchantSmsHits,
   }
 });
 
-app.get('/api/payment/qr-status/:orderId', rateLimit(qrStatusHits,60*1000,120), async(req,res)=>{
+app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(req,res)=>{
   try{
     const ord=await q('SELECT order_id,qr_code_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
@@ -635,17 +564,17 @@ app.get('/api/payment/qr-status/:orderId', rateLimit(qrStatusHits,60*1000,120), 
   }catch(e){console.error('Manual QR status error:',e);res.status(500).json({error:e.message||'Could not check order'});}
 });
 
-// Offline-tolerant UTR verification: a submitted UTR gets a 30-minute
-// reconciliation window so temporary mobile-network loss does not cause an
-// otherwise valid payment to be rejected before the Merchant Verify app can sync.
-const UTR_VERIFY_WINDOW_MS = 30 * 60 * 1000;
+// Strict UTR verification: an order submitted with a UTR must receive a matching
+// merchant SMS (UTR + exact amount) within the verification window. Otherwise
+// it is rejected automatically and no ID can be released.
+const UTR_VERIFY_WINDOW_MS = 90 * 1000;
 async function autoRejectUnverifiedOrders(){
   try{
     await q(`UPDATE orders SET status='rejected'
       WHERE status='payment_received'
         AND utr IS NOT NULL
         AND sms_verified_at IS NULL
-        AND COALESCE(utr_submitted_at, created_at) < NOW() - INTERVAL '30 minutes'`);
+        AND COALESCE(utr_submitted_at, created_at) < NOW() - INTERVAL '90 seconds'`);
   }catch(e){ console.error('Auto reject unverified UTRs:',e.message); }
 }
 setInterval(autoRejectUnverifiedOrders, 15000);
@@ -752,7 +681,7 @@ app.post('/api/admin/manual-bonus-release/:utr',auth,adminMutationGuard,async(re
   }catch(e){try{await client.query('ROLLBACK')}catch{};console.error('Manual bonus release error:',e);res.status(500).json({error:'Could not manually release bonus ID'});}finally{client.release();}
 });
 
-app.get('/api/order-check/:utr', rateLimit(orderCheckHits,60*1000,30), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
+app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
 
 app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile(path.join(__dirname,'public','admin.html')); });
 
