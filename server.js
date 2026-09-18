@@ -124,7 +124,15 @@ app.get('/health', (req,res)=>res.json({ok:true,service:'nishad-brand-store'}));
 
 const loginAttempts=new Map();
 const loginIpAttempts=new Map();
-const apiHits=new Map();
+// Keep independent buckets for unrelated endpoints. The storefront polls QR status
+// every 3 seconds, so sharing one IP bucket with UTR submission could incorrectly
+// make a legitimate UTR submit return HTTP 429.
+const siteVerifyHits=new Map();
+const orderCreateHits=new Map();
+const utrSubmitHits=new Map();
+const merchantSmsHits=new Map();
+const qrStatusHits=new Map();
+const orderCheckHits=new Map();
 const claimHits=new Map();
 const adminMutationHits=new Map();
 function clientIp(req){ return String(req.ip||'unknown').slice(0,100); }
@@ -155,7 +163,7 @@ function recordLoginFailure(key,ip){
   if(ip){ const b=loginIpAttempts.get(ip); if(!b || now-b.first>=10*60*1000) loginIpAttempts.set(ip,{first:now,count:1}); else b.count++; }
 }
 function clearLoginFailures(key,ip){loginAttempts.delete(key); if(ip) loginIpAttempts.delete(ip);}
-setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of loginIpAttempts) if(now-v.first>10*60*1000) loginIpAttempts.delete(k); for(const [k,v] of apiHits) if(now-v.first>60*1000) apiHits.delete(k); for(const [k,v] of claimHits) if(now-v.first>10*60*1000) claimHits.delete(k); for(const [k,v] of adminMutationHits) if(now-v.first>60*1000) adminMutationHits.delete(k); },5*60*1000).unref();
+setInterval(()=>{ const now=Date.now(); for(const [k,v] of loginAttempts) if(now-v.first>10*60*1000) loginAttempts.delete(k); for(const [k,v] of loginIpAttempts) if(now-v.first>10*60*1000) loginIpAttempts.delete(k); for(const m of [siteVerifyHits,orderCreateHits,utrSubmitHits,merchantSmsHits,qrStatusHits,orderCheckHits]) for(const [k,v] of m) if(now-v.first>60*1000) m.delete(k); for(const [k,v] of claimHits) if(now-v.first>10*60*1000) claimHits.delete(k); for(const [k,v] of adminMutationHits) if(now-v.first>60*1000) adminMutationHits.delete(k); },5*60*1000).unref();
 
 
 function siteGate(req,res,next){
@@ -265,7 +273,7 @@ function publicSettings(s, stock=0){
   return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim(), bonusOfferEnabled:s.bonus_offer_enabled!=='false', bonusPurchaseQty};
 }
 
-app.post('/api/site-verify', rateLimit(apiHits,60*1000,30), async (req,res)=>{
+app.post('/api/site-verify', rateLimit(siteVerifyHits,60*1000,10), async (req,res)=>{
   try {
     const secret=String(process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY||'').trim();
     const token=String(req.body?.token||'').trim();
@@ -421,7 +429,7 @@ async function createOrder(req,res){
     res.json({orderId,orderToken,qrImage,upiLink,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,originalAmount:money(originalPrice),discount:money(discount),expiresAt:Date.now()+300000});
   }catch(e){console.error('Manual UPI order create error:',e);res.status(500).json({error:e.message || 'Could not create order'});}
 }
-app.post('/api/orders', rateLimit(apiHits,60*1000,20), createOrder);
+app.post('/api/orders', rateLimit(orderCreateHits,60*1000,10), createOrder);
 
 function verifyOrderToken(order,token){
   if(!order || !order.qr_code_id || !token) return false;
@@ -464,7 +472,7 @@ async function utrCloudflareGuard(req,res,next){
   next();
 }
 
-app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*1000,20), async(req,res)=>{
+app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(utrSubmitHits,60*1000,10), async(req,res)=>{
   try{
     const orderId=String(req.params.orderId||'').trim();
     const orderToken=String(req.headers['x-order-token']||'').trim();
@@ -508,7 +516,7 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*10
   }
 });
 
-app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(apiHits,60*1000,60), async(req,res)=>{
+app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(merchantSmsHits,60*1000,60), async(req,res)=>{
   try {
     const utr=String(req.body?.utr||'').trim().replace(/\s+/g,'').toUpperCase();
     const amountPaise=Number(req.body?.amount_paise);
@@ -549,7 +557,7 @@ app.post('/api/merchant/sms-verify', merchantAppAuth, rateLimit(apiHits,60*1000,
   }
 });
 
-app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(req,res)=>{
+app.get('/api/payment/qr-status/:orderId', rateLimit(qrStatusHits,60*1000,60), async(req,res)=>{
   try{
     const ord=await q('SELECT order_id,qr_code_id,status,utr,package_qty,amount_paise,created_at,fulfilled_at FROM orders WHERE order_id=$1',[req.params.orderId]);
     if(!ord.rows[0]) return res.status(404).json({error:'Order not found'});
@@ -681,7 +689,7 @@ app.post('/api/admin/manual-bonus-release/:utr',auth,adminMutationGuard,async(re
   }catch(e){try{await client.query('ROLLBACK')}catch{};console.error('Manual bonus release error:',e);res.status(500).json({error:'Could not manually release bonus ID'});}finally{client.release();}
 });
 
-app.get('/api/order-check/:utr', rateLimit(apiHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
+app.get('/api/order-check/:utr', rateLimit(orderCheckHits,60*1000,20), async(req,res)=>{ try{ const utr=String(req.params.utr||'').trim().replace(/\s+/g,''); if(!/^[A-Za-z0-9]{8,35}$/.test(utr)) return res.status(400).json({error:'Invalid UTR / Transaction ID'}); res.json(await getOrderItems(utr)); }catch{res.status(500).json({error:'Server error'});} });
 
 app.get('/admin', (req,res)=>{ res.set('Cache-Control','no-store'); res.sendFile(path.join(__dirname,'public','admin.html')); });
 
