@@ -33,9 +33,3 @@ Keep these only in Render Environment Variables, never in the ZIP/repository:
 ## V44.1 database compatibility fix
 
 Added a startup migration that creates `orders.qr_code_id` on existing databases when the column is missing. This fixes the production error `column "qr_code_id" of relation "orders" does not exist` without requiring existing order data to be recreated.
-
-## V44.68.1 — Direct UPI App Payment Fix
-- UPI intent now uses the standard `tr` transaction reference field for the unique order ID.
-- The UPI `tn` note is kept short and human-readable instead of putting the long order ID in the note field.
-- Mobile Direct UPI button keeps the `upi://pay` flow and provides a QR fallback message if the app does not open.
-- This does not bypass bank/UPI security declines on the receiver account; if the UPI app itself rejects the payment for security reasons, the receiver UPI ID/account must be checked with the PSP/bank.
