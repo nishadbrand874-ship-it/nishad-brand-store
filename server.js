@@ -415,7 +415,7 @@ async function createOrder(req,res){
     const orderToken=crypto.randomBytes(32).toString('base64url');
     const orderTokenHash=crypto.createHash('sha256').update(orderToken).digest('hex');
     const amount=price.toFixed(2);
-    const upiLink='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payee)+'&am='+encodeURIComponent(amount)+'&cu=INR&tn='+encodeURIComponent('NISHAD BRAND ORDER');
+    const upiLink='upi://pay?pa='+encodeURIComponent(vpa)+'&pn='+encodeURIComponent(payee)+'&am='+encodeURIComponent(amount)+'&cu=INR';
     const qrImage=await QRCode.toDataURL(upiLink,{width:360,margin:2,errorCorrectionLevel:'M'});
     await q('INSERT INTO orders(order_id,qr_code_id,package_qty,amount_paise,status,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,$6,$7)',[orderId,orderTokenHash,qty,money(price),'created',name,phone]);
     res.json({orderId,orderToken,qrImage,upiLink,amount:money(price),currency:'INR',quantity:qty,pricePerId:basePrice,originalAmount:money(originalPrice),discount:money(discount),expiresAt:Date.now()+300000});
