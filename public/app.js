@@ -121,7 +121,7 @@ async function init(){
 function updateCustomTotal(){const el=$('customQty'),total=$('customTotal');if(!el||!total||!config)return;const raw=String(el.value||'').trim();if(!raw){total.textContent='₹0';return;}let qty=Math.floor(Number(raw));if(!Number.isFinite(qty)||qty<1){total.textContent='₹0';return;}const stock=Number(config.stock||0);if(stock>0&&qty>stock){total.textContent='₹'+money(Number(config.pricePerId||0)*stock)+' (max '+stock+')';return;}total.textContent='₹'+money(Number(config.pricePerId||0)*qty);}
 function normalizeCustomQty(){const el=$('customQty');if(!el||!config)return;const stock=Number(config.stock||0);let qty=Math.floor(Number(el.value)||0);if(stock<=0){el.value='';$('customTotal').textContent='₹0';return;}qty=Math.max(1,Math.min(stock,qty||1));el.value=qty;updateCustomTotal();}
 function buyCustom(){const el=$('customQty');const qty=Math.floor(Number(el?.value)||0);const stock=Number(config?.stock||0);if(!qty||qty<1||qty>stock)return;openPay(qty,Number(config.pricePerId||0)*qty);}
-function openPay(qty,price){price=Number(price||0);selected={qty,price};$('qrDownload').classList.add('hidden');$('qrDownload').removeAttribute('href');$('payText').textContent=qty+' ID package — ₹'+money(price);$('qrBox').classList.add('hidden');$('payStatus').textContent='';$('modal').classList.remove('hidden');startQrPayment();}
+function openPay(qty,price){price=Number(price||0);selected={qty,price};$('qrDownload').classList.add('hidden');$('qrDownload').removeAttribute('href');$('payText').textContent=qty+' ID package — ₹'+money(price);$('qrBox').classList.add('hidden');$('payStatus').textContent='QR तैयार हो रहा है…';$('modal').classList.remove('hidden');startQrPayment();}
 function closePay(){stopPolling();window.currentOrderId='';window.currentOrderToken='';$('modal').classList.add('hidden');}
 async function startQrPayment(){
   stopPolling();
@@ -154,7 +154,7 @@ async function checkQrStatus(orderId){
     const r=await fetch('/api/payment/qr-status/'+encodeURIComponent(orderId),{cache:'no-store',headers:{'X-Order-Token':String(window.currentOrderToken||'')}}); const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Verification failed');
     if(d.status==='approved' || d.status==='paid'){stopPolling();$('utrMsg').innerHTML='<div class="success"><b>✅ PAYMENT APPROVED</b><br>Aapki payment approve ho gayi hai. Neeche ID delivery ho gayi hai.</div>';showIDs(d.items,d.order);return;}
-    if(d.status==='pending_approval'){ $('payStatus').innerHTML=''; return; }
+    if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="pending"><b>Payment verification pending</b><br>Merchant Verify app se UTR + exact amount match hone ka wait hai. Match na hone par order automatically reject hoga.<br><small>Payment details securely hidden.</small></div>'; return; }
     if(d.status==='rejected'){ stopPolling(); const msg='<div class="error">Your UTR / Transaction ID was rejected.</div>'; $('payStatus').innerHTML=msg; $('utrMsg').innerHTML=msg; return; }if(d.status==='expired'){stopPolling();$('payStatus').innerHTML='<div class="error">QR expired. Please click Buy Now again to generate a new QR.</div>';return;}
   }catch(e){console.warn(e);}
 }
