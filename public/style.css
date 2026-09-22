@@ -795,3 +795,6 @@ body.stock-empty-mode .check{margin-top:10px}
 #utrCheckSection,#bonusClaimSection{scroll-margin-top:105px}
 @media(max-width:600px){.header-actions{gap:6px}.manage-btn{padding:8px 10px!important;font-size:11px!important}.header-badge{display:none}.manage-menu{right:0;width:180px}}
 .old-price{text-decoration:line-through;opacity:.58;font-size:.8em;margin-right:5px}.save-text{font-size:12px;font-weight:900;color:#16a34a;margin-top:-3px;margin-bottom:8px}
+
+/* V44.68 payment text cleanup: keep the requested instruction only; hide lower status copy. */
+.qr-status{display:none !important;}
