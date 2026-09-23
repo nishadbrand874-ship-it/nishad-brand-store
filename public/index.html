@@ -1,53 +1,6 @@
 <!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NISHAD BRAND • Live Store</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/favicon.png"><link rel="stylesheet" href="style.css"><meta name="cf-turnstile-site-key" content="__CF_TURNSTILE_SITE_KEY__"><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
-<style>
-/* V44.72 SIMPLE GREEN CIRCLE — push, pause, push */
-.utr-running-wheel-wrap{display:none;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center;background:rgba(255,255,255,.78);backdrop-filter:blur(3px)}
-.utr-running-wheel{width:min(82vw,280px);text-align:center;background:#fff;border-radius:12px;padding:10px 11px;box-shadow:0 7px 22px rgba(0,0,0,.12);border:1px solid #e5e7eb}
-.utr-track{position:relative;height:22px;overflow:hidden;border-radius:999px;background:#f0fdf4;border:1px solid #bbf7d0}
-.utr-wheel{position:absolute;left:4px;top:3px;width:16px;height:16px;border-radius:50%;background:#22c55e;box-shadow:0 1px 7px rgba(34,197,94,.38);animation:utrCirclePush 1.9s ease-in-out infinite}
-@keyframes utrCirclePush{
-  0%{left:4px}
-  12%{left:18%}
-  22%{left:18%}
-  34%{left:40%}
-  44%{left:40%}
-  56%{left:61%}
-  66%{left:61%}
-  78%{left:82%}
-  88%{left:82%}
-  100%{left:calc(100% - 20px)}
-}
-.utr-wheel-title{margin:7px 0 1px;font-size:13px;font-weight:800;color:#166534}
-.utr-wheel-sub{margin:0;color:#64748b;font-size:10px}
-.utr-wheel-success{display:none;color:#15803d;font-size:17px;font-weight:900}
-.utr-running-wheel.done .utr-track{display:none}
-.utr-running-wheel.done .utr-wheel-title{display:none}
-.utr-running-wheel.done .utr-wheel-sub{display:none}
-.utr-running-wheel.done .utr-wheel-success{display:block}
-@media(max-width:480px){.utr-running-wheel{width:235px;padding:9px}.utr-track{height:20px}.utr-wheel{width:14px;height:14px;top:2px}.utr-wheel-title{font-size:12px}.utr-wheel-sub{font-size:9px}}
-</style>
-<div id="utrRunningWheelWrap" class="utr-running-wheel-wrap" aria-live="polite">
-  <div id="utrRunningWheel" class="utr-running-wheel">
-    <div class="utr-track"><div class="utr-wheel" aria-hidden="true"></div></div>
-    <div class="utr-wheel-title">Payment Verification...</div>
-    <p class="utr-wheel-sub">Please wait while we verify your UTR</p>
-    <div class="utr-wheel-success">✓ Payment Verified</div>
-  </div>
-</div>
-<script>
-window.showUTRRunningWheel=function(){
-  const w=document.getElementById('utrRunningWheelWrap'), c=document.getElementById('utrRunningWheel');
-  if(!w||!c)return;
-  c.classList.remove('done'); w.style.display='flex';
-};
-window.finishUTRRunningWheel=function(success=true){
-  const w=document.getElementById('utrRunningWheelWrap'), c=document.getElementById('utrRunningWheel');
-  if(!w||!c)return;
-  if(success){c.classList.add('done'); setTimeout(()=>w.style.display='none',1100);}
-  else {w.style.display='none';}
-};
-</script>
+
 
 </head><body>
 <header class="site-header">
@@ -106,17 +59,5 @@ window.finishUTRRunningWheel=function(success=true){
   <div id="payStatus" class="qr-status">QR तैयार हो रहा है…</div>
 </div></div>
 <script src="app.js?v=44.73"></script>
-<script>
-document.addEventListener('click',function(e){
-  const el=e.target.closest('button,input[type="submit"],[role="button"]');
-  if(!el)return;
-  const t=(el.innerText||el.value||el.getAttribute('aria-label')||'').toLowerCase();
-  if(/utr|verify|submit payment|payment/.test(t)) window.showUTRRunningWheel?.();
-},true);
-document.addEventListener('submit',function(e){
-  const t=(e.target.innerText||e.target.textContent||'').toLowerCase();
-  if(/utr|verify|payment/.test(t)) window.showUTRRunningWheel?.();
-},true);
-</script>
 
 </body></html>
