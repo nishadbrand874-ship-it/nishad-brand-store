@@ -57,3 +57,16 @@ body{background:radial-gradient(circle at 10% 0%,rgba(59,130,246,.28),transparen
 .discount-settings-box h3{margin:0 0 7px}.discount-settings-box p{margin:0 0 14px;color:#475569}.discount-list{display:grid;gap:10px;margin-bottom:14px}.discount-row{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:12px;align-items:center;padding:12px;border:1px solid #dbe4ee;border-radius:12px;background:#fff}.discount-title b{display:block;font-size:16px}.discount-title span{display:block;color:#64748b;font-size:11px;margin-top:3px}.discount-row label{margin:0}.discount-row input{margin:5px 0 0!important}.discount-final{font-size:12px;color:#475569}.discount-final b{font-size:17px;color:#047857}.discount-final small{color:#16a34a;font-weight:800}.discount-settings-box #discountSaveMsg{margin-top:10px;font-weight:800;color:#047857}@media(max-width:700px){.discount-row{grid-template-columns:1fr}.discount-final{padding-top:0}}
 
 .discount-standalone{margin-top:0}.discount-note{padding:14px 16px;margin-bottom:14px;border-radius:12px;background:#eff6ff;color:#1e3a8a;line-height:1.5}.discount-save-btn{min-width:230px}.discount-settings-box .discount-row input{font-size:16px;font-weight:700}.discount-settings-box .discount-row label{font-weight:800}
+
+.maintenance-settings{margin-top:18px;padding:18px;border:1px solid rgba(59,130,246,.25);border-radius:16px;background:rgba(30,41,59,.35)}
+.maintenance-settings h3{margin:0 0 8px}.maintenance-settings p{color:#94a3b8;line-height:1.5}
+.maintenance-settings .checkrow{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:12px 0;padding:12px;border-radius:12px;background:rgba(15,23,42,.5)}
+.maintenance-settings input[type="checkbox"]{width:22px;height:22px;accent-color:#22c55e}
+.maintenance-settings textarea,.maintenance-settings input:not([type="checkbox"]){width:100%;margin-top:6px}
+.maintenance-hint{font-size:12px;color:#94a3b8;margin-top:8px}
+
+/* ===== V44.68 MAINTENANCE PREVIEW ===== */
+.maintenance-actions{margin-top:14px;padding:13px 14px;border-radius:13px;background:linear-gradient(135deg,rgba(37,99,235,.16),rgba(6,182,212,.12));border:1px solid rgba(96,165,250,.25);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.maintenance-actions span{font-size:11px;color:#94a3b8;line-height:1.45;flex:1;min-width:220px}
+.preview-btn{border:0;border-radius:11px;padding:11px 14px;font-weight:900;cursor:pointer;color:#fff;background:linear-gradient(135deg,#2563eb,#0891b2,#4f46e5);box-shadow:0 8px 20px rgba(37,99,235,.2)}
+.preview-btn:hover{filter:brightness(1.06);transform:translateY(-1px)}

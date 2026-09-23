@@ -110,13 +110,40 @@ app.use(cookieParser());
 app.use((req,res,next)=>{ if(req.path.startsWith('/api/')) res.set('Cache-Control','no-store'); next(); });
 
 // Serve the storefront with the Turnstile Site Key embedded for the first-load gate.
-app.get('/', (req,res)=>{
+app.get('/', async (req,res)=>{
   try {
+    const s=await settings();
+    res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma','no-cache');
+    if(String(s.maintenance_mode||'false')==='true'){
+      const file=fs.readFileSync(path.join(__dirname,'public','maintenance.html'),'utf8');
+      const safe=(v)=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;');
+      const siteName=safe(s.site_name||'NISHAD BRAND');
+      const message=safe(s.maintenance_message||'Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।').replace(/\\n/g,'<br>');
+      const channel=safe(s.whatsapp_channel||'https://whatsapp.com/channel/0029Vb70ysjKGGGJCEavqD3h');
+      return res.type('html').send(file.replaceAll('__SITE_NAME__',siteName).replace('__MAINTENANCE_MESSAGE__',message).replace('__WHATSAPP_CHANNEL__',channel));
+    }
     const file=fs.readFileSync(path.join(__dirname,'public','index.html'),'utf8');
     const siteKey=String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim().replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/</g,'&lt;');
-    res.set('Cache-Control','no-store');
     res.type('html').send(file.replace('__CF_TURNSTILE_SITE_KEY__',siteKey));
-  } catch { res.status(500).send('Storefront unavailable'); }
+  } catch(e) { console.error('Storefront route:',e); res.status(500).send('Storefront unavailable'); }
+});
+// Keep Maintenance Mode effective even if someone directly requests /index.html.
+app.use(async (req,res,next)=>{
+  if(req.path==='/index.html'){
+    try{
+      const s=await settings();
+      if(String(s.maintenance_mode||'false')==='true'){
+        const file=fs.readFileSync(path.join(__dirname,'public','maintenance.html'),'utf8');
+        const safe=(v)=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;');
+        return res.type('html').send(file
+          .replaceAll('__SITE_NAME__',safe(s.site_name||'NISHAD BRAND'))
+          .replace('__MAINTENANCE_MESSAGE__',safe(s.maintenance_message||'Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।').replace(/\\n/g,'<br>'))
+          .replace('__WHATSAPP_CHANNEL__',safe(s.whatsapp_channel||'https://whatsapp.com/channel/0029Vb70ysjKGGGJCEavqD3h')));
+      }
+    }catch(e){ console.error('Maintenance guard:',e); }
+  }
+  next();
 });
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -195,6 +222,21 @@ function auth(req,res,next){
     next();
   } catch { res.status(401).json({error:'Unauthorized'}); }
 }
+// Protected preview mode: admin can review the live storefront even while Maintenance Mode is ON.
+app.get('/preview', auth, async (req,res)=>{
+  try {
+    const file=fs.readFileSync(path.join(__dirname,'public','index.html'),'utf8');
+    const siteKey=String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim()
+      .replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/</g,'&lt;');
+    res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma','no-cache');
+    res.type('html').send(file.replace('__CF_TURNSTILE_SITE_KEY__',siteKey));
+  } catch(e) {
+    console.error('Preview route:',e);
+    res.status(500).send('Preview unavailable');
+  }
+});
+
 function money(n){ return Math.round(Number(n)*100); }
 function signToken(){ return jwt.sign({role:'admin',jti:crypto.randomBytes(16).toString('hex')}, process.env.JWT_SECRET, {expiresIn:'2h'}); }
 async function q(text, params=[]){ return pool.query(text, params); }
@@ -321,7 +363,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 });
 
 app.post('/api/admin/settings',auth,adminMutationGuard,async(req,res)=>{
-  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled','bonus_purchase_qty',
+  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','maintenance_mode','maintenance_message','whatsapp_channel','bonus_offer_enabled','bonus_purchase_qty',
     'package_discount_1','package_discount_2','package_discount_5','package_discount_10','package_discount_15','package_discount_20'];
   if(req.body.bonus_purchase_qty!==undefined){
     const qty=Number(req.body.bonus_purchase_qty);
