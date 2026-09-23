@@ -120,7 +120,7 @@ app.get('/', async (req,res)=>{
       const safe=(v)=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;');
       const siteName=safe(s.site_name||'NISHAD BRAND');
       const message=safe(s.maintenance_message||'Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।').replace(/\\n/g,'<br>');
-      return res.type('html').send(file.replaceAll('__SITE_NAME__',siteName).replace('__MAINTENANCE_MESSAGE__',message).replace('__TELEGRAM_CHANNEL__','https://t.me/+Fl5CSLFcIqwyMWNl'));
+      return res.type('html').send(file.replaceAll('__SITE_NAME__',siteName).replace('__MAINTENANCE_MESSAGE__',message).replace('__WHATSAPP_CHANNEL__',safe(s.whatsapp_channel||'https://whatsapp.com/channel/0029Vb70ysjKGGGJCEavqD3h')));
     }
     const file=fs.readFileSync(path.join(__dirname,'public','index.html'),'utf8');
     const siteKey=String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim().replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/</g,'&lt;');
@@ -138,7 +138,7 @@ app.use(async (req,res,next)=>{
         return res.type('html').send(file
           .replaceAll('__SITE_NAME__',safe(s.site_name||'NISHAD BRAND'))
           .replace('__MAINTENANCE_MESSAGE__',safe(s.maintenance_message||'Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।').replace(/\\n/g,'<br>'))
-          .replace('__TELEGRAM_CHANNEL__','https://t.me/+Fl5CSLFcIqwyMWNl'));
+          .replace('__WHATSAPP_CHANNEL__',safe(s.whatsapp_channel||'https://whatsapp.com/channel/0029Vb70ysjKGGGJCEavqD3h')));
       }
     }catch(e){ console.error('Maintenance guard:',e); }
   }
