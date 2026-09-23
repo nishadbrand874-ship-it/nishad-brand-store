@@ -138,7 +138,7 @@ async function submitUTR(){
   if(!/^[A-Za-z0-9]{8,35}$/.test(utr)){$('utrMsg').innerHTML='<div class="error">UTR / Transaction ID 8–35 letters/digits का होना चाहिए.</div>';return;}
   const orderId=window.currentOrderId;
   if(!orderId){$('utrMsg').innerHTML='<div class="error">Order session नहीं मिला. Buy Now फिर से करें.</div>';return;}
-  $('utrBtn').disabled=true;$('utrMsg').textContent='Submitting…';
+  $('utrBtn').disabled=true; showUtrProgress(); $('utrMsg').textContent='';
   try{
     const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':String(window.currentOrderToken||'')},body:JSON.stringify({utr,turnstileToken:getTurnstileToken()})});
     const d=await r.json();
@@ -147,15 +147,18 @@ async function submitUTR(){
     $('utrBtn').disabled=true;
     resetTurnstile();
     await checkQrStatus(orderId);
-  }catch(e){$('utrMsg').innerHTML='<div class="error">'+esc(e.message)+'</div>';$('utrBtn').disabled=false;resetTurnstile();}
+  }catch(e){hideUtrProgress();$('utrMsg').innerHTML='<div class="error">'+esc(e.message)+'</div>';$('utrBtn').disabled=false;resetTurnstile();}
 }
+function showUtrProgress(){const p=$('utrProgress');if(p){p.classList.remove('hidden');p.classList.remove('done');}}
+function hideUtrProgress(done=false){const p=$('utrProgress');if(p){if(done)p.classList.add('done');else p.classList.add('hidden');}}
+
 async function checkQrStatus(orderId){
   try{
     const r=await fetch('/api/payment/qr-status/'+encodeURIComponent(orderId),{cache:'no-store',headers:{'X-Order-Token':String(window.currentOrderToken||'')}}); const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Verification failed');
-    if(d.status==='approved' || d.status==='paid'){stopPolling();$('utrMsg').innerHTML='<div class="success"><b>✅ PAYMENT APPROVED</b><br>Aapki payment approve ho gayi hai. Neeche ID delivery ho gayi hai.</div>';showIDs(d.items,d.order);return;}
+    if(d.status==='approved' || d.status==='paid'){stopPolling();hideUtrProgress(true);$('utrMsg').innerHTML='<div class="success"><b>✅ PAYMENT APPROVED</b><br>Aapki payment approve ho gayi hai. Neeche ID delivery ho gayi hai.</div>';showIDs(d.items,d.order);return;}
     if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="pending"><b>Payment verification pending</b><br>Merchant Verify app se UTR + exact amount match hone ka wait hai. Match na hone par order automatically reject hoga.<br><small>Payment details securely hidden.</small></div>'; return; }
-    if(d.status==='rejected'){ stopPolling(); const msg='<div class="error">Your UTR / Transaction ID was rejected.</div>'; $('payStatus').innerHTML=msg; $('utrMsg').innerHTML=msg; return; }if(d.status==='expired'){stopPolling();$('payStatus').innerHTML='<div class="error">QR expired. Please click Buy Now again to generate a new QR.</div>';return;}
+    if(d.status==='rejected'){ stopPolling(); hideUtrProgress(); const msg='<div class="error">Your UTR / Transaction ID was rejected.</div>'; $('payStatus').innerHTML=msg; $('utrMsg').innerHTML=msg; return; }if(d.status==='expired'){stopPolling();hideUtrProgress();$('payStatus').innerHTML='<div class="error">QR expired. Please click Buy Now again to generate a new QR.</div>';return;}
   }catch(e){console.warn(e);}
 }
 function startCountdown(expiresAt){clearInterval(countdownTimer);const tick=()=>{const left=Math.max(0,expiresAt-Date.now());const sec=Math.ceil(left/1000);if(sec<=0){$('timer').textContent='00:00';clearInterval(countdownTimer);return;}const m=String(Math.floor(sec/60)).padStart(2,'0'),s=String(sec%60).padStart(2,'0');$('timer').textContent=m+':'+s;};tick();countdownTimer=setInterval(tick,1000);}
