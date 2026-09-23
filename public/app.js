@@ -142,7 +142,19 @@ async function submitUTR(){
   try{
     const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':String(window.currentOrderToken||'')},body:JSON.stringify({utr,turnstileToken:getTurnstileToken()})});
     const d=await r.json();
-    if(!r.ok) throw new Error(d.error||'UTR submit failed');
+    if(!r.ok){
+      if(d && d.status==='rejected'){
+        stopPolling();
+        hideUtrProgress();
+        const msg='Your UTR / Transaction ID was rejected.';
+        $('payStatus').innerHTML='<div class="error">'+msg+'</div>';
+        $('utrMsg').innerHTML='<div class="error">'+msg+'</div>';
+        $('utrBtn').disabled=true;
+        resetTurnstile();
+        return;
+      }
+      throw new Error(d.error||'UTR submit failed');
+    }
     $('utrMsg').innerHTML='<div class="pending"><b>UTR submitted for verification.</b><br>Actual payment SMS ke UTR + exact amount match hone par hi ID release hogi. Match na hone par order reject ho jayega.</div>';
     $('utrBtn').disabled=true;
     resetTurnstile();

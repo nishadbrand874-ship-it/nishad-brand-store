@@ -1,24 +1,35 @@
 <!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NISHAD BRAND • Live Store</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/favicon.png"><link rel="stylesheet" href="style.css"><meta name="cf-turnstile-site-key" content="__CF_TURNSTILE_SITE_KEY__"><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
 <style>
-/* V44.70 RUNNING GREEN WHEEL */
-.utr-running-wheel-wrap{display:none;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center;background:rgba(255,255,255,.86);backdrop-filter:blur(5px)}
-.utr-running-wheel{width:min(82vw,520px);text-align:center;background:#fff;border-radius:22px;padding:26px 22px;box-shadow:0 16px 50px rgba(0,0,0,.16)}
-.utr-track{position:relative;height:86px;overflow:hidden;border-radius:43px;background:#eef8f1;border:1px solid #c9ead2}
-.utr-wheel{position:absolute;left:-90px;top:8px;width:70px;height:70px;border-radius:50%;border:9px solid #16a34a;border-top-color:#86efac;border-right-color:#22c55e;box-shadow:0 0 18px rgba(22,163,74,.35);animation:utrWheelRun 1.05s linear infinite}
-@keyframes utrWheelRun{0%{transform:translateX(0) rotate(0)}100%{transform:translateX(calc(min(82vw,520px) + 100px)) rotate(720deg)}}
-.utr-wheel-title{margin:16px 0 5px;font-size:20px;font-weight:800;color:#166534}
-.utr-wheel-sub{margin:0;color:#64748b;font-size:14px}
-.utr-wheel-success{display:none;color:#15803d;font-size:34px;font-weight:900}
+/* V44.72 SIMPLE GREEN CIRCLE — push, pause, push */
+.utr-running-wheel-wrap{display:none;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center;background:rgba(255,255,255,.78);backdrop-filter:blur(3px)}
+.utr-running-wheel{width:min(82vw,280px);text-align:center;background:#fff;border-radius:12px;padding:10px 11px;box-shadow:0 7px 22px rgba(0,0,0,.12);border:1px solid #e5e7eb}
+.utr-track{position:relative;height:22px;overflow:hidden;border-radius:999px;background:#f0fdf4;border:1px solid #bbf7d0}
+.utr-wheel{position:absolute;left:4px;top:3px;width:16px;height:16px;border-radius:50%;background:#22c55e;box-shadow:0 1px 7px rgba(34,197,94,.38);animation:utrCirclePush 1.9s ease-in-out infinite}
+@keyframes utrCirclePush{
+  0%{left:4px}
+  12%{left:18%}
+  22%{left:18%}
+  34%{left:40%}
+  44%{left:40%}
+  56%{left:61%}
+  66%{left:61%}
+  78%{left:82%}
+  88%{left:82%}
+  100%{left:calc(100% - 20px)}
+}
+.utr-wheel-title{margin:7px 0 1px;font-size:13px;font-weight:800;color:#166534}
+.utr-wheel-sub{margin:0;color:#64748b;font-size:10px}
+.utr-wheel-success{display:none;color:#15803d;font-size:17px;font-weight:900}
 .utr-running-wheel.done .utr-track{display:none}
 .utr-running-wheel.done .utr-wheel-title{display:none}
 .utr-running-wheel.done .utr-wheel-sub{display:none}
 .utr-running-wheel.done .utr-wheel-success{display:block}
-@media(max-width:480px){.utr-running-wheel{width:calc(100vw - 28px);padding:20px 14px}.utr-track{height:70px}.utr-wheel{width:56px;height:56px;top:7px;border-width:7px}.utr-wheel-title{font-size:18px}}
+@media(max-width:480px){.utr-running-wheel{width:235px;padding:9px}.utr-track{height:20px}.utr-wheel{width:14px;height:14px;top:2px}.utr-wheel-title{font-size:12px}.utr-wheel-sub{font-size:9px}}
 </style>
 <div id="utrRunningWheelWrap" class="utr-running-wheel-wrap" aria-live="polite">
   <div id="utrRunningWheel" class="utr-running-wheel">
-    <div class="utr-track"><div class="utr-wheel"></div></div>
+    <div class="utr-track"><div class="utr-wheel" aria-hidden="true"></div></div>
     <div class="utr-wheel-title">Payment Verification...</div>
     <p class="utr-wheel-sub">Please wait while we verify your UTR</p>
     <div class="utr-wheel-success">✓ Payment Verified</div>
@@ -94,7 +105,7 @@ window.finishUTRRunningWheel=function(success=true){
   <div class="verify-note"><b>Payment करें और UTR / Transaction ID नीचे submit करें.</b></div><div id="utrBox" class="utr-box"><input id="utrInput" placeholder="Enter UTR / Transaction ID" maxlength="35" inputmode="text" autocomplete="off"><div id="turnstileBox" class="turnstile-box"></div><button id="utrBtn" onclick="submitUTR()">Submit UTR</button><div id="utrProgress" class="utr-progress hidden" aria-live="polite"><div class="utr-spinner-wrap"><div class="utr-spinner"><span class="utr-spinner-check">✓</span></div></div><div class="utr-progress-text"><b>Verifying Payment…</b><span>Secure UTR check in progress</span></div></div><div id="utrMsg"></div></div>
   <div id="payStatus" class="qr-status">QR तैयार हो रहा है…</div>
 </div></div>
-<script src="app.js?v=44.68"></script>
+<script src="app.js?v=44.73"></script>
 <script>
 document.addEventListener('click',function(e){
   const el=e.target.closest('button,input[type="submit"],[role="button"]');
