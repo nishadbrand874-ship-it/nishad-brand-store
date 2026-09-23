@@ -168,12 +168,12 @@ NISHAD BRAND storefront हर 3 सेकंड में `/api/config` से 
 
 
 ## Maintenance Mode V30.2
-Admin Panel → Store Settings में Maintenance Mode ON/OFF करें। ON होने पर customer को maintenance page दिखेगा और नीचे configured WhatsApp Channel button रहेगा। Admin Panel `/admin` से उपलब्ध रहेगा। Default channel: https://whatsapp.com/channel/0029Vb70ysjKGGGJCEavqD3h
+Admin Panel → Store Settings में Maintenance Mode ON/OFF करें। ON होने पर customer को maintenance page दिखेगा और नीचे configured Telegram Channel button रहेगा। Admin Panel `/admin` से उपलब्ध रहेगा। Default channel: https://t.me/+Fl5CSLFcIqwyMWNl
 
 
 ## V44.68 Maintenance + Protected Preview Mode
 - Admin Panel → Store Settings में **Website Maintenance Mode** ON करने पर customer को redesigned maintenance page दिखेगा.
-- Maintenance page responsive है और इसमें brand logo, animated status, WhatsApp Channel तथा Refresh button है.
+- Maintenance page responsive है और इसमें brand logo, animated status, Telegram Channel तथा Refresh button है.
 - Admin login के बाद **OPEN PREVIEW MODE** button से `/preview` खुलेगा. Preview protected है और Maintenance ON होने पर भी live storefront दिखाता है.
 - Customer direct `/index.html` खोलकर Maintenance Mode bypass नहीं कर सकता.
 - Update/deploy के बाद पहले Preview में payment, QR, UTR, ID purchase और mobile layout test करें; सब ठीक होने पर Maintenance OFF करें.
