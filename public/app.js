@@ -155,7 +155,6 @@ async function submitUTR(){
       }
       throw new Error(d.error||'UTR submit failed');
     }
-    $('utrMsg').innerHTML='<div class="pending"><b>UTR submitted for verification.</b><br>Actual payment SMS ke UTR + exact amount match hone par hi ID release hogi. Match na hone par order reject ho jayega.</div>';
     $('utrBtn').disabled=true;
     resetTurnstile();
     await checkQrStatus(orderId);
