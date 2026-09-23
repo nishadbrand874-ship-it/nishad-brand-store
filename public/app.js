@@ -167,7 +167,7 @@ async function checkQrStatus(orderId){
   try{
     const r=await fetch('/api/payment/qr-status/'+encodeURIComponent(orderId),{cache:'no-store',headers:{'X-Order-Token':String(window.currentOrderToken||'')}}); const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Verification failed');
-    if(d.status==='approved' || d.status==='paid'){stopPolling();hideUtrProgress(true);$('payStatus').innerHTML='';showIDs(d.items,d.order);return;}
+    if(d.status==='approved' || d.status==='paid'){stopPolling();hideUtrProgress(false);$('payStatus').innerHTML='';showIDs(d.items,d.order);return;}
     if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="pending"><b>Payment verification pending</b><br>Merchant Verify app se UTR + exact amount match hone ka wait hai. Match na hone par order automatically reject hoga.<br><small>Payment details securely hidden.</small></div>'; return; }
     if(d.status==='rejected'){ stopPolling(); hideUtrProgress(); const msg='<div class="error">Your UTR / Transaction ID was rejected.</div>'; $('payStatus').innerHTML=msg; $('utrMsg').innerHTML=msg; return; }if(d.status==='expired'){stopPolling();hideUtrProgress();$('payStatus').innerHTML='<div class="error">QR expired. Please click Buy Now again to generate a new QR.</div>';return;}
   }catch(e){console.warn(e);}
@@ -181,10 +181,12 @@ function copyAllCredentials(items,btn){const list=(items||[]);if(!list.length)re
 function copyAllButton(items,label='📋 Copy All'){const encoded=JSON.stringify(items||[]).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');return '<button type="button" class="copy-all-cred" onclick="copyAllCredentials('+encoded+',this)">'+label+'</button>';}
 function credentialRows(items,prefix){return (items||[]).map((x,i)=>'<div class="idrow"><div class="cred-line"><b>'+prefix+(i+1)+':</b> <code>'+esc(x.login_id)+'</code>'+copyButton(x.login_id,'📋 Copy ID')+'</div>'+(x.login_password?'<div class="cred-line"><b>Password:</b> <code>'+esc(x.login_password)+'</code>'+copyButton(x.login_password,'📋 Copy Password')+'</div>':'')+(x.extra_data?'<div class="cred-extra">'+esc(x.extra_data)+'</div>':'')+'</div>').join('');}
 function showIDs(items,order){
+  // On successful verification, remove the old progress/approval text and show only a compact green success tick, then credentials below.
+  hideUtrProgress(false);
   const list=Array.isArray(items)?items:[];
-  if(!list.length){$('utrMsg').innerHTML='<div class="success"><b>✅ PAYMENT APPROVED</b><br>ID delivery data is loading. Please wait…</div>';return;}
+  if(!list.length){$('utrMsg').innerHTML='<div class="success id-delivery"><b>✓ Payment Success</b><br>ID delivery data is loading. Please wait…</div>';return;}
   const rows=credentialRows(list,'ID ');
-  $('utrMsg').innerHTML='<div class="success id-delivery"><b>✅ PAYMENT APPROVED — ID DELIVERY SUCCESSFUL</b><br><span>Aapki ID aur Password neeche mil gaya hai.</span><div class="copy-all-wrap">'+copyAllButton(list,'📋 Copy All IDs & Passwords')+'</div>'+rows+'</div>';
+  $('utrMsg').innerHTML='<div class="success id-delivery"><div class="payment-success-tick" aria-label="Payment Success"><span>✓</span><b>Payment Success</b></div><div class="copy-all-wrap">'+copyAllButton(list,'📋 Copy All IDs & Passwords')+'</div>'+rows+'</div>';
 }
 
 async function claimBonus(){
