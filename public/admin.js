@@ -6,8 +6,18 @@ let paymentAlertReady=false;
 let knownPaymentRequestIds=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-function toggleMenu(){$('menu').classList.toggle('hidden')}
-function showSection(id){document.querySelectorAll('.section').forEach(x=>x.classList.add('hidden'));$(id).classList.remove('hidden');$('menu').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'});}
+function toggleMenu(){
+  const m=$('menu');
+  if(window.innerWidth<=900){m.classList.toggle('mobile-open');}
+}
+function showSection(id){
+  document.querySelectorAll('.section').forEach(x=>x.classList.add('hidden'));
+  const target=$(id); if(target) target.classList.remove('hidden');
+  document.querySelectorAll('#menu .sidebar-nav button').forEach(b=>b.classList.toggle('active',b.dataset.section===id));
+  if(window.innerWidth<=900) $('menu').classList.remove('mobile-open');
+  window.scrollTo({top:0,behavior:'smooth'});
+  if(id==='maintenanceSec') updateMaintenanceStatus();
+}
 async function login(){const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('user').value,password:$('pass').value})});const d=await r.json();if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}else $('msg').textContent=d.error||'Login failed';}
 async function logout(){
   // Logout in one click: stop client activity immediately, clear the server cookie,
@@ -235,7 +245,13 @@ function startOrdersAutoRefresh(){
       const pending=voicePendingOrders;
       if(pending.length) latestPaymentRequestId=String(pending[0].order_id); else latestPaymentRequestId=null;
       const ordersSection=$('orders');
-      if(ordersSection && !ordersSection.classList.contains('hidden')) { $('ordersTable').innerHTML=ordersTable(d.orders||[]); }
+      if(ordersSection && !ordersSection.classList.contains('hidden')) { if($('m_maintenance_mode')){
+  $('m_maintenance_mode').checked=s.maintenance_mode==='true';
+  $('m_maintenance_message').value=s.maintenance_message||'Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।';
+  $('m_whatsapp_channel').value=s.whatsapp_channel||'';
+  updateMaintenanceStatus();
+}
+$('ordersTable').innerHTML=ordersTable(d.orders||[]); }
       $('dash').innerHTML=renderDashboardStats(d);
     }catch(e){ console.warn('Auto refresh:',e); }
     finally{ ordersRefreshBusy=false; }
@@ -288,6 +304,25 @@ async function addIDs(){const lines=$('ids').value.split('\n').map(x=>x.trim()).
 function openPreviewMode(){
   const w=window.open('/preview','_blank','noopener,noreferrer');
   if(!w) alert('Preview open नहीं हुआ। Browser में pop-up allow करें.');
+}
+function updateMaintenanceStatus(){
+  const cb=$('m_maintenance_mode'), st=$('maintenanceStatus');
+  if(!cb||!st)return;
+  const on=cb.checked;
+  st.className='maintenance-status '+(on?'on':'off');
+  st.textContent=on?'● MAINTENANCE ON':'● MAINTENANCE OFF';
+}
+async function saveMaintenanceSettings(){
+  const body={
+    maintenance_mode:$('m_maintenance_mode')?.checked?'true':'false',
+    maintenance_message:$('m_maintenance_message')?.value||'Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।',
+    whatsapp_channel:$('m_whatsapp_channel')?.value||''
+  };
+  const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){alert('Maintenance save failed: '+(d.error||'Unable to save'));return;}
+  alert(body.maintenance_mode==='true'?'Maintenance Mode ON कर दिया गया.':'Maintenance Mode OFF कर दिया गया.');
+  load();
 }
 async function saveSettings(){const keys=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','maintenance_message','whatsapp_channel'];const body={};keys.forEach(k=>body[k]=$('s_'+k).value);body.price_per_id=String(Number(body.price_per_id));body.maintenance_mode=$('s_maintenance_mode')?.checked?'true':'false';body.bonus_offer_enabled=window.bonusOfferEnabled?'true':'false';const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));alert(r.ok?'Settings saved. Website rate is now ₹'+Number(d.pricePerId||0).toLocaleString('en-IN')+' per ID.':'Failed: '+(d.error||'Unable to save'));if(r.ok)load();}
 window.bonusOfferEnabled=true;
