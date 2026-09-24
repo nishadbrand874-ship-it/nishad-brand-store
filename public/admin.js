@@ -58,8 +58,7 @@ function startOrdersAutoRefresh(){
       const ordersSection=$('orders');
       if(ordersSection && !ordersSection.classList.contains('hidden')) $('ordersTable').innerHTML=ordersTable(d.orders||[]);
       if($('dash')) $('dash').innerHTML=renderDashboardStats(d);
-$('dashboardHistory').innerHTML=dashboardHistory(d.orders||[]);
-      if($('dashboardHistory')) $('dashboardHistory').innerHTML=dashboardHistory(d.orders||[]);
+if($('dashboardHistory')) $('dashboardHistory').innerHTML=dashboardHistory(d.orders||[]);
       const s=d.settings||{};
       if($('m_maintenance_mode')){
         $('m_maintenance_mode').checked=s.maintenance_mode==='true';
@@ -95,6 +94,7 @@ async function load(){
     updateMaintenanceStatus();
   }
 }
+function renderDashboardStats(d){const t=d.today||{};return '<div class="stat today-sold"><span>🛒 Today Sold IDs</span><b>'+Number(t.today_sold_ids||0)+'</b><small>आज बिके हुए IDs</small></div><div class="stat today-added"><span>➕ Today IDs Added</span><b>'+Number(t.today_ids_added||0)+'</b><small>आज stock में जोड़े गए</small></div><div class="stat today-rejected"><span>❌ Today Reject</span><b>'+Number(t.today_rejected||0)+'</b><small>आज rejected payments</small></div><div class="stat today-approved"><span>✅ Today Approve</span><b>'+Number(t.today_approved||0)+'</b><small>आज approved payments</small></div><div class="stat"><span>📦 Available IDs</span><b>'+Number(d.stock||0)+'</b><small>Current stock</small></div><div class="stat"><span>📊 Total Sold IDs</span><b>'+Number(d.sold||0)+'</b><small>All-time sold</small></div><div class="stat"><span>⏳ Pending Approval</span><b>'+(d.orders||[]).filter(x=>x.status==='payment_received').length+'</b><small>Waiting for admin</small></div><div class="stat"><span>🧾 Recent Orders</span><b>'+(d.orders||[]).length+'</b><small>Latest 100 orders</small></div>'; }
 function dashboardHistory(rows){
   rows=(rows||[]).filter(r=>r.status!=='created').slice(0,8);
   if(!rows.length) return '<div class="empty history-empty">No payment history yet.</div>';
