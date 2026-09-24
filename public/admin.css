@@ -250,3 +250,7 @@ body.auth-locked .login-panel{
   .section-badge{display:none}
   .save-store-btn{width:100%}
 }
+
+
+/* ===== CLASSIC DASHBOARD RESTORE ===== */
+.dashboard-section{padding-bottom:26px}.dashboard-refresh{white-space:nowrap}.dashboard-history{margin-top:22px;padding-top:20px;border-top:1px solid #dbe5f0}.history-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:12px}.history-head h2{margin:5px 0}.history-head p{color:#64748b;margin:0}.history-table-wrap{overflow:auto;border:1px solid #d7e3ef;border-radius:15px;background:#fff}.history-table{min-width:760px}.history-table th{background:linear-gradient(135deg,#eff6ff,#e0f2fe);color:#173b72}.history-table td{background:#fff}.history-table tr:hover td{background:#f8fbff}.history-empty{border:1px dashed #bfd0e3;margin-top:4px}.history-table small{color:#64748b;font-weight:700}@media(max-width:700px){.history-head{flex-direction:column}.dashboard-refresh{width:100%}}

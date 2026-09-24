@@ -58,6 +58,8 @@ function startOrdersAutoRefresh(){
       const ordersSection=$('orders');
       if(ordersSection && !ordersSection.classList.contains('hidden')) $('ordersTable').innerHTML=ordersTable(d.orders||[]);
       if($('dash')) $('dash').innerHTML=renderDashboardStats(d);
+$('dashboardHistory').innerHTML=dashboardHistory(d.orders||[]);
+      if($('dashboardHistory')) $('dashboardHistory').innerHTML=dashboardHistory(d.orders||[]);
       const s=d.settings||{};
       if($('m_maintenance_mode')){
         $('m_maintenance_mode').checked=s.maintenance_mode==='true';
@@ -92,6 +94,11 @@ async function load(){
     $('m_whatsapp_channel').value=s.whatsapp_channel||'';
     updateMaintenanceStatus();
   }
+}
+function dashboardHistory(rows){
+  rows=(rows||[]).filter(r=>r.status!=='created').slice(0,8);
+  if(!rows.length) return '<div class="empty history-empty">No payment history yet.</div>';
+  return '<div class="history-table-wrap"><table class="history-table"><thead><tr><th>Order</th><th>Amount</th><th>UTR</th><th>Status</th><th>Date</th></tr></thead><tbody>'+rows.map(r=>'<tr><td><b>'+esc(r.order_id)+'</b><br><small>'+esc(r.package_qty)+' ID</small></td><td>₹'+(Number(r.amount_paise||0)/100).toLocaleString('en-IN')+'</td><td><code>'+esc(r.utr||r.payment_id||'—')+'</code></td><td>'+statusBadge(r.status)+'</td><td>'+esc(new Date(r.created_at).toLocaleString('en-IN'))+'</td></tr>').join('')+'</tbody></table></div>';
 }
 function ordersTable(rows){
   // Payment Approvals में केवल UTR/payment submit किए हुए orders दिखाएँ.
