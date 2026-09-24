@@ -1,58 +1,13 @@
-<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>NISHAD BRAND • Secure Admin Panel</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/favicon.png"><link rel="stylesheet" href="admin.css"></head><body class="auth-locked">
-<header class="topbar">
-  <div class="topbar-left">
-    <button id="sidebarToggle" class="mobile-menu-btn" onclick="toggleMenu()" aria-label="Open menu">☰</button>
-    <div class="brand"><img src="/logo.png" alt="NISHAD BRAND"><div><b>NISHAD BRAND</b><span>Secure Store Admin</span></div></div>
-  </div>
-  <div class="top-actions">
-    <button id="topLogout" class="menu-btn logout-top" onclick="logout()">↪ Logout</button>
-  </div>
-</header>
-<aside id="menu" class="menu" aria-label="Admin navigation">
-  <div class="sidebar-head">
-    <div class="sidebar-logo"><img src="/logo.png" alt="NISHAD BRAND"></div>
-    <div><b>NISHAD BRAND</b><span>ADMIN PANEL</span></div>
-  </div>
-  <div class="sidebar-profile"><div class="profile-avatar">A</div><div><b>Administrator</b><span>Secure access</span></div><span class="online-dot"></span></div>
-  <div class="nav-label">MAIN MENU</div>
-  <nav class="sidebar-nav">
-    <button class="active" data-section="overview" onclick="showSection('overview')"><span>📊</span><b>Dashboard</b></button>
-    <button data-section="orders" onclick="showSection('orders')"><span>💳</span><b>Payment Approvals</b></button>
-    <button data-section="inventory" onclick="showSection('inventory')"><span>🆔</span><b>ID Inventory</b></button>
-    <button data-section="maintenanceSec" onclick="showSection('maintenanceSec')"><span>🛠️</span><b>Maintenance</b><em>NEW</em></button>
-    <button data-section="settingsSec" onclick="showSection('settingsSec')"><span>⚙️</span><b>Store Settings</b></button>
-    <button data-section="bonusSec" onclick="showSection('bonusSec')"><span>🎁</span><b>Bonus Management</b></button>
-    <button data-section="discountSec" onclick="showSection('discountSec')"><span>💰</span><b>Save Discount</b></button>
-    <button data-section="appearanceSec" onclick="showSection('appearanceSec')"><span>🎨</span><b>Appearance</b></button>
-    <button data-section="assetsSec" onclick="showSection('assetsSec')"><span>🖼️</span><b>Logo / QR</b></button>
-  </nav>
-  <div class="sidebar-bottom"><button class="sidebar-logout" onclick="logout()"><span>↪</span><b>Logout</b></button></div>
-</aside>
+<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>NISHAD BRAND • Admin V30.2 • Maintenance</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/favicon.png"><link rel="stylesheet" href="admin.css"></head><body>
+<header class="topbar"><div class="brand"><img src="/logo.png"><div><b>NISHAD BRAND</b><span>Secure Store Admin</span></div></div><div class="top-actions"><button id="voiceBtn" class="menu-btn" onclick="toggleVoiceControl()">🎙 VOICE CONTROL OFF</button><button id="menuBtn" class="menu-btn" onclick="toggleMenu()">☰ MENU</button></div></header><div id="voiceStatus" class="voice-status">Voice control band hai</div>
+<div id="menu" class="menu hidden"><button onclick="showSection('overview')">📊 Dashboard</button><button onclick="showSection('orders')">💳 Payment Approvals</button><button onclick="showSection('inventory')">🆔 ID Inventory</button><button onclick="showSection('settingsSec')">⚙ Store Settings</button><button onclick="showSection('bonusSec')">🎁 Bonus Management</button><button onclick="showSection('discountSec')">💰 Save Discount</button><button onclick="showSection('appearanceSec')">🎨 Appearance</button><button onclick="showSection('assetsSec')">🖼 Logo / QR</button><button onclick="logout()">↪ Logout</button></div>
 <main class="wrap">
 <section id="login" class="panel login-panel"><div class="login-brand"><img src="/logo.png" alt="NISHAD BRAND"><div><b>NISHAD BRAND</b><span>SECURE STORE ADMIN</span></div></div><div class="login-pill">🔐 ADMIN ACCESS</div><h1>Welcome Back</h1><p>Login to manage payments, ID stock and approvals.</p><div class="login-form"><label>Username<input id="user" placeholder="Enter username" autocomplete="username"></label><label>Password<input id="pass" type="password" placeholder="Enter password" autocomplete="current-password"></label><button class="primary login-submit" onclick="login()">🚀 Secure Login</button></div><div id="msg"></div></section>
-<div id="panel" class="admin-content hidden">
-<section id="overview" class="section dashboard-section"><div class="section-head"><div><span class="eyebrow">NISHAD BRAND</span><h1>Admin Dashboard</h1><p>UPI payment is manual. Customer submits UTR and ID is released after payment approval.</p></div><button class="secondary dashboard-refresh" onclick="load()">↻ Refresh Dashboard</button></div><div id="dash" class="stats"></div><div class="dashboard-history"><div class="history-head"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Payment History</h2><p>Latest payment activity और approval history.</p></div><button class="secondary" onclick="showSection('orders')">View All History →</button></div><div id="dashboardHistory"></div></div></section>
-<section id="orders" class="section hidden"><div class="section-head"><div><span class="eyebrow">PAYMENTS</span><h2>Payment Approvals</h2><p>Customer-submitted UTR payments stay pending until you approve them. <b>● Auto-refresh: every 3 seconds</b></p></div><button class="secondary" onclick="load()">↻ Refresh</button></div><div id="ordersTable"></div></section>
-<section id="inventory" class="section hidden"><div class="section-head"><div><span class="eyebrow">INVENTORY</span><h2>Add IDs</h2><p>Format: <b>ID | Password | Extra</b> — one ID per line.</p></div></div><textarea id="ids" rows="8" placeholder="user1 | pass1\nuser2 | pass2"></textarea><button class="primary" onclick="addIDs()">＋ Add Inventory</button><div id="inventoryTable"></div></section>
-<section id="settingsSec" class="section hidden"><div class="section-head"><div><span class="eyebrow">STORE CONFIGURATION</span><h2>⚙️ Store Settings</h2><p>Price, WhatsApp number, UPI details and customer announcement.</p></div><div class="section-badge">STORE</div></div><div id="settings"></div><button class="primary save-store-btn" onclick="saveSettings()">💾 Save Store Settings</button></section>
-<section id="maintenanceSec" class="section hidden">
-  <div class="section-head"><div><span class="eyebrow">SYSTEM CONTROL</span><h2>🛠️ Website Maintenance</h2><p>Customer website को temporary maintenance mode में डालें। Admin Panel हमेशा accessible रहेगा.</p></div><div id="maintenanceStatus" class="maintenance-status">Checking...</div></div>
-  <div class="maintenance-hero">
-    <div class="maintenance-icon">🛠️</div>
-    <div><h3>Maintenance Mode</h3><p>ON करने पर customer storefront की जगह maintenance page दिखेगा.</p></div>
-    <label class="switch"><input id="m_maintenance_mode" type="checkbox" onchange="updateMaintenanceStatus()"><span class="slider"></span></label>
-  </div>
-  <div class="maintenance-form-grid">
-    <label>Maintenance Message<textarea id="m_maintenance_message" rows="4" placeholder="Website maintenance में है..."></textarea></label>
-    <label>WhatsApp Channel Link<input id="m_whatsapp_channel" placeholder="https://whatsapp.com/channel/..."></label>
-  </div>
-  <div class="maintenance-actions">
-    <button type="button" class="primary" onclick="saveMaintenanceSettings()">💾 Save Maintenance Settings</button>
-    <button type="button" class="secondary" onclick="openPreviewMode()">👁 Open Preview</button>
-    <span>Preview केवल logged-in Admin के लिए है.</span>
-  </div>
-  <div class="maintenance-tip">💡 <b>Tip:</b> Live customer site बंद करने से पहले Preview Mode से page check कर लें.</div>
-</section><section id="bonusSec" class="section hidden"><div class="section-head"><div><span class="eyebrow">BONUS</span><h2>🎁 Bonus Management</h2><p>Bonus offer को ON/OFF और manually manage करें.</p></div></div><div id="bonusManage"></div></section><section id="discountSec" class="section hidden"><div class="section-head"><div><span class="eyebrow">DISCOUNT</span><h2>💰 Save Discount Management</h2><p>हर package का discount Admin यहाँ manually set कर सकता है.</p></div></div><div id="discountManage"></div></section>
+<div id="panel" class="hidden">
+<section id="overview" class="section"><div class="section-head"><div><span class="eyebrow">NISHAD BRAND</span><h1>Admin Dashboard</h1><p>UPI payment is manual. Customer submits UTR and ID is released after payment approval.</p></div></div><div id="dash" class="stats"></div></section>
+<section id="orders" class="section"><div class="section-head"><div><span class="eyebrow">PAYMENTS</span><h2>Payment Approvals</h2><p>Customer-submitted UTR payments stay pending until you approve them. <b>● Auto-refresh: every 3 seconds</b></p></div><button class="secondary" onclick="load()">↻ Refresh</button></div><div id="ordersTable"></div></section>
+<section id="inventory" class="section"><div class="section-head"><div><span class="eyebrow">INVENTORY</span><h2>Add IDs</h2><p>Format: <b>ID | Password | Extra</b> — one ID per line.</p></div></div><textarea id="ids" rows="8" placeholder="user1 | pass1\nuser2 | pass2"></textarea><button class="primary" onclick="addIDs()">＋ Add Inventory</button><div id="inventoryTable"></div></section>
+<section id="settingsSec" class="section"><div class="section-head"><div><span class="eyebrow">STORE</span><h2>Store Settings</h2><p>Price, WhatsApp number and customer news.</p></div></div><div id="settings"></div><button class="primary" onclick="saveSettings()">💾 Save Settings</button></section><section id="bonusSec" class="section hidden"><div class="section-head"><div><span class="eyebrow">BONUS</span><h2>🎁 Bonus Management</h2><p>Bonus offer को ON/OFF और manually manage करें.</p></div></div><div id="bonusManage"></div></section><section id="discountSec" class="section hidden"><div class="section-head"><div><span class="eyebrow">DISCOUNT</span><h2>💰 Save Discount Management</h2><p>हर package का discount Admin यहाँ manually set कर सकता है.</p></div></div><div id="discountManage"></div></section>
 <section id="appearanceSec" class="section hidden"><div class="section-head"><div><span class="eyebrow">THEME</span><h2>Appearance</h2><p>Store theme and payment display.</p></div></div><div class="theme-note"><b>Modern blue theme</b><br>Customer website uses compact QR, stock badges and colored news banner.</div></section>
-<section id="assetsSec" class="section hidden"><div class="section-head"><div><span class="eyebrow">DESIGN</span><h2>Logo / QR</h2><p>Upload the customer-facing logo or UPI QR.</p></div></div><form id="assets"><label>Logo<input type="file" name="logo" accept="image/*"></label><label>Payment QR<input type="file" name="qr" accept="image/*"></label><button class="primary">Upload Assets</button></form></section>
-</div></main><script src="admin.js?v=44.82-sidebar-fixed"></script></body></html>
+<section id="assetsSec" class="section"><div class="section-head"><div><span class="eyebrow">DESIGN</span><h2>Logo / QR</h2><p>Upload the customer-facing logo or UPI QR.</p></div></div><form id="assets"><label>Logo<input type="file" name="logo" accept="image/*"></label><label>Payment QR<input type="file" name="qr" accept="image/*"></label><button class="primary">Upload Assets</button></form></section>
+</div></main><script src="admin.js?v=44.67"></script></body></html>
