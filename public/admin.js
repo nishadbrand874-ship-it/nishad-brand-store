@@ -1,9 +1,6 @@
 'use strict';
 let ordersRefreshTimer=null;
 let ordersRefreshBusy=false;
-let paymentAlertBusy=false;
-let paymentAlertReady=false;
-let knownPaymentRequestIds=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 function toggleMenu(){
@@ -18,15 +15,12 @@ function showSection(id){
   window.scrollTo({top:0,behavior:'smooth'});
   if(id==='maintenanceSec') updateMaintenanceStatus();
 }
-async function login(){const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('user').value,password:$('pass').value})});const d=await r.json();if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}else $('msg').textContent=d.error||'Login failed';}
+async function login(){const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('user').value,password:$('pass').value})});const d=await r.json();if(r.ok){document.body.classList.remove('auth-locked');$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}else $('msg').textContent=d.error||'Login failed';}
 async function logout(){
   // Logout in one click: stop client activity immediately, clear the server cookie,
   // then replace the page so the login screen is shown without requiring a second click.
   try{
     if(ordersRefreshTimer){clearInterval(ordersRefreshTimer);ordersRefreshTimer=null;}
-    if(voiceRecognition){try{voiceRecognition.stop();}catch(e){}}
-    voiceControlOn=false;
-    try{window.speechSynthesis?.cancel?.();}catch(e){}
     document.querySelectorAll('#menu button').forEach(b=>{
       if(/logout/i.test(b.textContent||'')){b.disabled=true;b.textContent='↪ Logging out...';}
     });
@@ -38,221 +32,25 @@ async function logout(){
   }
 }
 
-let voiceRecognition=null;
-let voiceControlOn=false;
-let latestPaymentRequestId=null;
-let voicePendingOrders=[];
-let voiceCommandBusy=false;
-let voiceRestartTimer=null;
-function speakVoiceReply(text){
-  try{
-    const u=new SpeechSynthesisUtterance(text);
-    u.lang='hi-IN'; u.rate=0.92; u.pitch=1.12; u.volume=1;
-    const voices=window.speechSynthesis?.getVoices?.()||[];
-    const hi=voices.find(v=>/^hi(-|_)?IN/i.test(v.lang||''))||voices.find(v=>/hindi/i.test(v.name||''));
-    if(hi) u.voice=hi;
-    window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
-  }catch(e){console.warn('Voice reply:',e);}
-}
-function setVoiceStatus(on,msg){
-  const b=$('voiceBtn'), st=$('voiceStatus');
-  if(b) b.textContent=on?'🎙 VOICE CONTROL ON':'🎙 VOICE CONTROL OFF';
-  if(st) st.textContent=msg|| (on?'Sun raha hoon...':'Voice control band hai');
-}
-function normalizeVoiceText(v){
-  return String(v||'').toLowerCase().replace(/[.,!?;:]/g,' ').replace(/\s+/g,' ').trim();
-}
-function normalizeVoiceUtr(v){
-  return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-}
-function findVoiceTarget(t){
-  const pending=(voicePendingOrders||[]).filter(r=>r.status==='payment_received');
-  if(!pending.length) return null;
-
-  // If a new payment alert already selected the newest request, use that exact order.
-  if(latestPaymentRequestId){
-    const selected=pending.find(r=>String(r.order_id)===String(latestPaymentRequestId));
-    if(selected && !/\b(utr|u\s*t\s*r)\b\s*[:#-]?\s*[a-z0-9]{6,35}/i.test(t)) return selected;
-  }
-
-  const lastPattern=/\b(last|latest)\b\s*(utr|u\s*t\s*r|request)\b|\b(utr|u\s*t\s*r)\b.*\b(last|latest)\b|\b(last|latest)\s*(payment|request)\b|लास्ट\s*(यूटीआर|यूटीर|रिक्वेस्ट|पेमेंट)|आखिरी\s*(यूटीआर|यूटीर|रिक्वेस्ट|पेमेंट)/i;
-  if(lastPattern.test(t) || /lastutr|lastrequest|latestutr|latestrequest/.test(t)) return pending[0];
-
-  // Explicit UTR/order target, including spaces that speech recognition may insert.
-  const m=t.match(/(?:utr|u\s*t\s*r|यूटीआर|यूटीर)(?:\s*(?:number|no|no\.|id|नंबर|नं|आईडी))?\s*[:#-]?\s*([a-z0-9][a-z0-9\s-]{3,40})/i);
-  if(m){
-    const wanted=normalizeVoiceUtr(m[1]);
-    if(wanted){
-      const exact=pending.find(r=>normalizeVoiceUtr(r.utr||r.payment_id)===wanted);
-      if(exact) return exact;
-    }
-  }
-
-  const candidates=t.match(/\b[a-z0-9]{6,35}\b/gi)||[];
-  for(const c of candidates){
-    const wanted=normalizeVoiceUtr(c);
-    const exact=pending.find(r=>normalizeVoiceUtr(r.utr||r.payment_id)===wanted);
-    if(exact) return exact;
-  }
-  return pending[0];
-}
-function commandHasWord(t,words){return words.some(x=>new RegExp('(^|\\s)'+x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?=\\s|$)','i').test(t));}
-async function handleVoiceCommand(raw){
-  const t=normalizeVoiceText(raw);
-  if(voiceCommandBusy || !t) return;
-  const approveWords=['approve','approved','aproov','aprove','approv','approvee','approve kar','approve kr','approve kardo','approve kar do','अप्रूव','अप्रुव','अप्रूव कर','अप्रूव कर दो','अनुमोदित','मंजूर','मंज़ूर','स्वीकृत'];
-  const rejectWords=['reject','rejected','rejact','rejecte','cancel','canceled','cancelled','reject kar','reject kr','reject kardo','reject kar do','cancel kar','cancel kr','cancel kardo','रिजेक्ट','रिजेक्टेड','रिजेक्ट कर','रिजेक्ट कर दो','रद्द','कैंसल','कैंसिल','निरस्त'];
-  const hasApprove=commandHasWord(t,approveWords)||/approve|aprov|apruv|अप्रूव|अप्रुव|मंजूर/.test(t);
-  const hasReject=commandHasWord(t,rejectWords)||/reject|rejact|cancel|रिजेक्ट|रद्द|कैंसल|कैंसिल/.test(t);
-  if(!hasApprove && !hasReject) return;
-  if(hasApprove && hasReject){ speakVoiceReply('बॉस, approve या reject में से एक command बोलिए।'); return; }
-  const target=findVoiceTarget(t);
-  if(!target){
-    setVoiceStatus(true,'कोई pending payment request नहीं है');
-    speakVoiceReply('ठीक है बॉस, अभी कोई pending payment request नहीं है।');
-    return;
-  }
-  voiceCommandBusy=true;
-  const id=String(target.order_id);
-  const action=hasReject?'reject':'approve';
-  setVoiceStatus(true,'Processing: '+action.toUpperCase()+' '+id);
-  try{
-    const r=await fetch('/api/admin/orders/'+encodeURIComponent(id)+'/'+action,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest','X-Voice-Command':'1'}});
-    const d=await r.json().catch(()=>({}));
-    if(r.ok){
-      latestPaymentRequestId=null;
-      voicePendingOrders=voicePendingOrders.filter(x=>String(x.order_id)!==id);
-      if(action==='approve') speakVoiceReply('ठीक है बॉस, request approve कर दी गई है और ID release हो गई है।');
-      else speakVoiceReply('ठीक है बॉस, request reject कर दी गई है।');
-      setVoiceStatus(true,'Command successful — '+action.toUpperCase());
-      await load();
-    }else{
-      setVoiceStatus(true,'Voice action failed: '+(d.error||'server error'));
-      speakVoiceReply('बॉस, request पर action नहीं हो पाया।');
-      console.warn('Voice action failed',r.status,d);
-    }
-  }catch(e){
-    setVoiceStatus(true,'Voice action network error');
-    speakVoiceReply('बॉस, request पर action नहीं हो पाया।');
-    console.warn('Voice action:',e);
-  }finally{voiceCommandBusy=false;}
-}
-function startVoiceControl(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){setVoiceStatus(false,'इस browser में voice command support नहीं है — Chrome/Edge इस्तेमाल करें');return;}
-  if(voiceControlOn) return;
-  voiceControlOn=true;
-  voiceRecognition=new SR();
-  voiceRecognition.lang='hi-IN';
-  voiceRecognition.continuous=true;
-  voiceRecognition.interimResults=false;
-  voiceRecognition.maxAlternatives=5;
-  voiceRecognition.onstart=()=>setVoiceStatus(true,'🎙 Sun raha hoon — “approve kar do” बोलें');
-  voiceRecognition.onresult=e=>{
-    for(let i=e.resultIndex;i<e.results.length;i++) if(e.results[i].isFinal){
-      const text=e.results[i][0]?.transcript||'';
-      console.log('[NISHAD VOICE]',text);
-      setVoiceStatus(true,'सुना: '+text);
-      handleVoiceCommand(text);
-    }
-  };
-  voiceRecognition.onerror=e=>{
-    console.warn('Voice recognition:',e.error);
-    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
-      voiceControlOn=false;
-      setVoiceStatus(false,'Microphone permission Allow करें, फिर Voice Control ON करें');
-    }else if(e.error==='audio-capture'){
-      setVoiceStatus(true,'Microphone उपलब्ध नहीं है — mic check करें');
-    }else if(e.error==='network'){
-      setVoiceStatus(true,'Voice service network error — फिर से सुनने की कोशिश हो रही है');
-    }else if(e.error==='aborted'){
-      setVoiceStatus(true,'Voice restart हो रहा है…');
-    }
-  };
-  voiceRecognition.onend=()=>{
-    if(!voiceControlOn) return;
-    clearTimeout(voiceRestartTimer);
-    voiceRestartTimer=setTimeout(()=>{
-      if(!voiceControlOn || !voiceRecognition) return;
-      try{voiceRecognition.start();}catch(e){console.warn('Voice restart:',e);}
-    },350);
-  };
-  try{
-    voiceRecognition.start();
-    setVoiceStatus(true,'🎙 Sun raha hoon — “approve kar do”, “request reject/cancel kar do”, “last UTR approve/reject kar do” बोलें');
-  }catch(e){voiceControlOn=false;setVoiceStatus(false,'Voice start नहीं हो पाया — microphone Allow करें');}
-}
-function stopVoiceControl(){
-  voiceControlOn=false;
-  clearTimeout(voiceRestartTimer); voiceRestartTimer=null;
-  if(voiceRecognition){try{voiceRecognition.onend=null;voiceRecognition.stop();}catch(_){} voiceRecognition=null;}
-  setVoiceStatus(false);
-}
-function toggleVoiceControl(){voiceControlOn?stopVoiceControl():startVoiceControl();}
-
-function statusBadge(s){const map={payment_received:['PENDING APPROVAL','pending'],approved:['APPROVED','approved'],paid:['APPROVED','approved'],rejected:['REJECTED','rejected'],created:['WAITING PAYMENT','created']};const a=map[s]||[String(s).toUpperCase(), 'created'];return '<span class="badge '+a[1]+'">'+a[0]+'</span>';}
-function renderDashboardStats(d){const t=d.today||{};return '<div class="stat today-sold"><span>🛒 Today Sold IDs</span><b>'+Number(t.today_sold_ids||0)+'</b><small>आज बिके हुए IDs</small></div><div class="stat today-added"><span>➕ Today IDs Added</span><b>'+Number(t.today_ids_added||0)+'</b><small>आज stock में जोड़े गए</small></div><div class="stat today-rejected"><span>❌ Today Reject</span><b>'+Number(t.today_rejected||0)+'</b><small>आज rejected payments</small></div><div class="stat today-approved"><span>✅ Today Approve</span><b>'+Number(t.today_approved||0)+'</b><small>आज approved payments</small></div><div class="stat"><span>📦 Available IDs</span><b>'+Number(d.stock||0)+'</b><small>Current stock</small></div><div class="stat"><span>📊 Total Sold IDs</span><b>'+Number(d.sold||0)+'</b><small>All-time sold</small></div><div class="stat"><span>⏳ Pending Approval</span><b>'+(d.orders||[]).filter(x=>x.status==='payment_received').length+'</b><small>Waiting for admin</small></div><div class="stat"><span>🧾 Recent Orders</span><b>'+(d.orders||[]).length+'</b><small>Latest 100 orders</small></div>';}
-function speakPaymentRequest(){
-  if(paymentAlertBusy) return;
-  paymentAlertBusy=true;
-  try{
-    const voices=window.speechSynthesis?.getVoices?.()||[];
-    const hi=voices.find(v=>/^hi(-|_)?IN/i.test(v.lang||'')) || voices.find(v=>/hindi/i.test(v.name||'')) || voices.find(v=>/^hi/i.test(v.lang||''));
-    let count=0;
-    const speakOne=()=>{
-      if(count>=3){paymentAlertBusy=false;return;}
-      const u=new SpeechSynthesisUtterance('Boss, payment request aaya hai.');
-      u.lang='hi-IN';
-      u.rate=0.9;
-      u.pitch=1.12;
-      u.volume=1;
-      if(hi) u.voice=hi;
-      u.onend=()=>{count++;setTimeout(speakOne,180);};
-      u.onerror=()=>{count++;setTimeout(speakOne,180);};
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    };
-    speakOne();
-  }catch(e){paymentAlertBusy=false;console.warn('Payment voice alert:',e);}
-}
-function checkForNewPaymentRequests(rows){
-  voicePendingOrders=(rows||[]).filter(r=>r.status==='payment_received').sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
-  const current=new Set((rows||[]).filter(r=>r.status==='payment_received').map(r=>String(r.order_id)));
-  if(!paymentAlertReady){
-    knownPaymentRequestIds=current;
-    paymentAlertReady=true;
-    return;
-  }
-  let isNew=false;
-  current.forEach(id=>{if(!knownPaymentRequestIds.has(id)) isNew=true;});
-  knownPaymentRequestIds=current;
-  if(isNew){
-    const newest=(rows||[]).filter(r=>r.status==='payment_received').sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
-    if(newest) latestPaymentRequestId=String(newest.order_id);
-    speakPaymentRequest();
-  }
-}
 function startOrdersAutoRefresh(){
   if(ordersRefreshTimer) return;
   ordersRefreshTimer=setInterval(async ()=>{
     if(ordersRefreshBusy) return;
     ordersRefreshBusy=true;
     try{
-      const r=await fetch('/api/admin/dashboard?ts='+Date.now(),{cache:'no-store'});
-      if(!r.ok) return;
+      const r=await fetch('/api/admin/dashboard?ts='+Date.now(),{cache:'no-store',credentials:'same-origin'});
+      if(!r.ok){ stopOrdersAutoRefresh(); return; }
       const d=await r.json();
-      checkForNewPaymentRequests(d.orders||[]);
-      const pending=voicePendingOrders;
-      if(pending.length) latestPaymentRequestId=String(pending[0].order_id); else latestPaymentRequestId=null;
       const ordersSection=$('orders');
-      if(ordersSection && !ordersSection.classList.contains('hidden')) { if($('m_maintenance_mode')){
-  $('m_maintenance_mode').checked=s.maintenance_mode==='true';
-  $('m_maintenance_message').value=s.maintenance_message||'Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।';
-  $('m_whatsapp_channel').value=s.whatsapp_channel||'';
-  updateMaintenanceStatus();
-}
-$('ordersTable').innerHTML=ordersTable(d.orders||[]); }
-      $('dash').innerHTML=renderDashboardStats(d);
+      if(ordersSection && !ordersSection.classList.contains('hidden')) $('ordersTable').innerHTML=ordersTable(d.orders||[]);
+      if($('dash')) $('dash').innerHTML=renderDashboardStats(d);
+      const s=d.settings||{};
+      if($('m_maintenance_mode')){
+        $('m_maintenance_mode').checked=s.maintenance_mode==='true';
+        $('m_maintenance_message').value=s.maintenance_message||'Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।';
+        $('m_whatsapp_channel').value=s.whatsapp_channel||'';
+        updateMaintenanceStatus();
+      }
     }catch(e){ console.warn('Auto refresh:',e); }
     finally{ ordersRefreshBusy=false; }
   },3000);
@@ -261,13 +59,26 @@ function stopOrdersAutoRefresh(){
   if(ordersRefreshTimer){clearInterval(ordersRefreshTimer);ordersRefreshTimer=null;}
 }
 
-async function load(){const r=await fetch('/api/admin/dashboard?ts='+Date.now(),{cache:'no-store'});if(!r.ok){$('panel').classList.add('hidden');$('login').classList.remove('hidden');return;}const d=await r.json();
-checkForNewPaymentRequests(d.orders||[]);
-$('dash').innerHTML=renderDashboardStats(d);
-const s=d.settings||{};window.bonusOfferEnabled=s.bonus_offer_enabled!=='false';$('settings').innerHTML='<div class="gateway-tip">📱 <b>UPI QR:</b> हर order में खरीदी गई ID की संख्या के हिसाब से exact amount वाला UPI QR अपने आप बनेगा. Payment के बाद customer UTR submit करेगा और आप manually approve करेंगे.</div><div class="formgrid">'+[['site_name','Site Name'],['whatsapp_number','WhatsApp Number'],['price_per_id','Price per ID'],['upi_vpa','UPI ID / VPA'],['upi_name','UPI Payee Name']].map(([k,l])=>'<label>'+l+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>').join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows="4" placeholder="Store news यहाँ लिखें...">'+esc(s.news||'')+'</textarea></label><div class="maintenance-settings"><h3>🔧 Website Maintenance Mode</h3><p>ON करने पर customer को website की जगह maintenance page दिखेगा। Admin Panel <b>/admin</b> खुला रहेगा।</p><label class="checkrow"><span>Maintenance Mode</span><input id="s_maintenance_mode" type="checkbox" '+(s.maintenance_mode==='true'?'checked':'')+'></label><label>Maintenance Message<textarea id="s_maintenance_message" rows="3" placeholder="Website maintenance में है...">'+esc(s.maintenance_message||'Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।')+'</textarea></label><label>WhatsApp Channel Link<input id="s_whatsapp_channel" value="'+esc(s.whatsapp_channel||'https://whatsapp.com/channel/0029Vb70ysjKGGGJCEavqD3h')+'"></label><div class="maintenance-hint">Customer को maintenance page के नीचे यही WhatsApp Channel दिखाई देगा।</div><div class="maintenance-actions"><button type="button" class="preview-btn" onclick="openPreviewMode()">👁 OPEN PREVIEW MODE</button><span>Preview केवल logged-in Admin के लिए खुलता है और Maintenance ON होने पर भी live storefront दिखाता है।</span></div></div>';
-$('ordersTable').innerHTML=ordersTable(d.orders||[]);
-$('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);
-$('bonusManage').innerHTML=renderBonusManagement(s);$('discountManage').innerHTML=renderPackageDiscountManagement(s);}
+async function load(){
+  const r=await fetch('/api/admin/dashboard?ts='+Date.now(),{cache:'no-store',credentials:'same-origin'});
+  if(!r.ok){ document.body.classList.add('auth-locked'); $('panel').classList.add('hidden'); $('login').classList.remove('hidden'); return; }
+  document.body.classList.remove('auth-locked');
+  const d=await r.json();
+  $('dash').innerHTML=renderDashboardStats(d);
+  const s=d.settings||{};
+  window.bonusOfferEnabled=s.bonus_offer_enabled!=='false';
+  $('settings').innerHTML='<div class="gateway-tip"><b>📱 UPI QR</b><br>हर order में खरीदी गई ID की संख्या के हिसाब से exact amount वाला UPI QR अपने आप बनेगा. Payment के बाद customer UTR submit करेगा और आप manually approve करेंगे.</div><div class="formgrid">'+[['site_name','Site Name'],['whatsapp_number','WhatsApp Number'],['price_per_id','Price per ID'],['upi_vpa','UPI ID / VPA'],['upi_name','UPI Payee Name']].map(([k,l])=>'<label>'+l+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>').join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows="4" placeholder="Store news यहाँ लिखें...">'+esc(s.news||'')+'</textarea></label><div class="settings-note">🔐 <b>Maintenance</b> अब केवल Left Sidebar के <b>Maintenance</b> option से manage होगा.</div>';
+  $('ordersTable').innerHTML=ordersTable(d.orders||[]);
+  $('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);
+  $('bonusManage').innerHTML=renderBonusManagement(s);
+  $('discountManage').innerHTML=renderPackageDiscountManagement(s);
+  if($('m_maintenance_mode')){
+    $('m_maintenance_mode').checked=s.maintenance_mode==='true';
+    $('m_maintenance_message').value=s.maintenance_message||'Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।';
+    $('m_whatsapp_channel').value=s.whatsapp_channel||'';
+    updateMaintenanceStatus();
+  }
+}
 function ordersTable(rows){
   // Payment Approvals में केवल UTR/payment submit किए हुए orders दिखाएँ.
   // WAITING PAYMENT (created) orders user के order-check flow में रहेंगे,
@@ -324,7 +135,17 @@ async function saveMaintenanceSettings(){
   alert(body.maintenance_mode==='true'?'Maintenance Mode ON कर दिया गया.':'Maintenance Mode OFF कर दिया गया.');
   load();
 }
-async function saveSettings(){const keys=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','maintenance_message','whatsapp_channel'];const body={};keys.forEach(k=>body[k]=$('s_'+k).value);body.price_per_id=String(Number(body.price_per_id));body.maintenance_mode=$('s_maintenance_mode')?.checked?'true':'false';body.bonus_offer_enabled=window.bonusOfferEnabled?'true':'false';const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));alert(r.ok?'Settings saved. Website rate is now ₹'+Number(d.pricePerId||0).toLocaleString('en-IN')+' per ID.':'Failed: '+(d.error||'Unable to save'));if(r.ok)load();}
+async function saveSettings(){
+  const keys=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news'];
+  const body={};
+  keys.forEach(k=>body[k]=$('s_'+k).value);
+  body.price_per_id=String(Number(body.price_per_id));
+  body.bonus_offer_enabled=window.bonusOfferEnabled?'true':'false';
+  const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});
+  const d=await r.json().catch(()=>({}));
+  alert(r.ok?'Store settings saved. Website rate is now ₹'+Number(d.pricePerId||body.price_per_id||0).toLocaleString('en-IN')+' per ID.':'Failed: '+(d.error||'Unable to save'));
+  if(r.ok) load();
+}
 window.bonusOfferEnabled=true;
 function toggleBonusOffer(){window.bonusOfferEnabled=!window.bonusOfferEnabled;const b=$('bonusToggle');if(b){b.className='bonus-toggle '+(window.bonusOfferEnabled?'on':'off');b.textContent=window.bonusOfferEnabled?'🟢 BONUS OFFER ON':'🔴 BONUS OFFER OFF';}saveSettings();}
 async function savePackageDiscounts(){
@@ -353,4 +174,4 @@ async function saveBonusPurchaseQty(){
 }
 async function manualBonusRelease(){const utr=String($('manualBonusUtr')?.value||'').trim();if(!utr)return alert('UTR डालें.');if(!confirm('इस UTR पर 1 bonus ID manually release करनी है?'))return;const r=await fetch('/api/admin/manual-bonus-release/'+encodeURIComponent(utr),{method:'POST'});const d=await r.json().catch(()=>({}));const out=$('manualBonusResult');if(r.ok){out.innerHTML='<div class=\"manual-success\">✓ Bonus ID released successfully.<br><b>Login:</b> '+esc(d.bonus?.login_id||'')+'<br><b>Password:</b> '+esc(d.bonus?.login_password||'')+'</div>';$('manualBonusUtr').value='';load();}else{if(out)out.innerHTML='<div class=\"manual-error\">'+esc(d.error||'Manual bonus release failed')+'</div>';}}
 $('assets').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/admin/assets',{method:'POST',body:new FormData($('assets'))});alert(r.ok?'Assets uploaded.':'Upload failed');if(r.ok)load();};
-fetch('/api/admin/me').then(r=>{if(r.ok){$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}});
+fetch('/api/admin/me').then(r=>{if(r.ok){document.body.classList.remove('auth-locked');$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}});

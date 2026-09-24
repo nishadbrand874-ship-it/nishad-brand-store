@@ -122,7 +122,132 @@ body{background:radial-gradient(circle at 70% 0%,rgba(59,130,246,.14),transparen
   .mobile-menu-btn{display:inline-flex}.topbar .brand{display:none}.voice-status{top:82px;right:10px}
 }
 @media(max-width:640px){
-  .topbar{height:66px;padding:0 10px}.top-actions{gap:5px}.logout-top{display:none}.menu-btn{padding:9px 10px;font-size:11px}
+  .topbar{height:66px;padding:0 10px}.top-actions{gap:5px}.logout-top{display:inline-flex}.menu-btn{padding:9px 10px;font-size:11px}
   .admin-content{padding-top:66px}.admin-content .section{margin:12px 10px;padding:16px;border-radius:17px}
   .maintenance-form-grid{grid-template-columns:1fr}.maintenance-hero{align-items:flex-start}.switch{margin-left:auto}
+}
+/* ===== V44.79 AUTH-ONLY LOGIN SCREEN ===== */
+body.auth-locked .topbar,
+body.auth-locked .menu,
+body.auth-locked .admin-content{display:none!important}
+body.auth-locked .wrap{min-height:100vh;max-width:none;margin:0;padding:30px;display:flex;align-items:center;justify-content:center}
+body.auth-locked .login-panel{width:min(470px,100%);margin:0}
+body.auth-locked #login{display:block!important}
+@media(max-width:640px){body.auth-locked .wrap{padding:16px}}
+
+
+/* ===== V44.80 CLEAN ADMIN UI / MAINTENANCE SEPARATION ===== */
+:root{
+  --brand-blue:#2563eb;
+  --brand-cyan:#06b6d4;
+  --brand-purple:#4f46e5;
+  --success:#16a34a;
+  --danger:#dc2626;
+  --gold:#f59e0b;
+}
+.top-actions{display:flex;align-items:center;gap:10px}
+.logout-top{
+  border:1px solid rgba(255,255,255,.22)!important;
+  background:linear-gradient(135deg,#334155,#172033)!important;
+  padding:11px 18px!important;
+  border-radius:12px!important;
+  box-shadow:0 8px 20px rgba(0,0,0,.18)!important;
+  transition:transform .18s ease,filter .18s ease!important;
+}
+.logout-top:hover{filter:brightness(1.12)!important;transform:translateY(-1px)}
+.admin-content{background:transparent}
+.admin-content .section{
+  background:rgba(255,255,255,.94)!important;
+  border:1px solid rgba(148,163,184,.28)!important;
+  box-shadow:0 18px 50px rgba(15,23,42,.09)!important;
+}
+.section-head{
+  padding-bottom:15px;
+  border-bottom:1px solid #e5edf7;
+}
+.section-head h1,.section-head h2{color:#0f1f3d}
+.eyebrow{color:#2563eb!important}
+.section-badge{
+  flex:0 0 auto;
+  padding:7px 11px;
+  border-radius:999px;
+  background:linear-gradient(135deg,#dbeafe,#cffafe);
+  color:#075985;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:1px;
+  border:1px solid #bae6fd;
+}
+.gateway-tip{
+  margin-bottom:18px!important;
+  padding:15px 17px!important;
+  border:1px solid #bfdbfe!important;
+  border-radius:15px!important;
+  background:linear-gradient(135deg,#eff6ff,#ecfeff)!important;
+  color:#1e3a8a!important;
+  line-height:1.55!important;
+}
+.formgrid{gap:15px!important}
+.formgrid label,.section label{color:#1e293b}
+.section input,.section textarea{
+  border:1px solid #cbd5e1!important;
+  background:#fff!important;
+  transition:border-color .18s,box-shadow .18s,transform .18s!important;
+}
+.section input:focus,.section textarea:focus{
+  border-color:#38bdf8!important;
+  box-shadow:0 0 0 4px rgba(56,189,248,.13)!important;
+}
+.primary{
+  background:linear-gradient(135deg,#2563eb 0%,#4f46e5 52%,#0891b2 100%)!important;
+  box-shadow:0 8px 18px rgba(37,99,235,.18);
+  transition:transform .18s ease,filter .18s ease,box-shadow .18s ease;
+}
+.primary:hover{filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 11px 24px rgba(37,99,235,.23)}
+.save-store-btn{margin-top:16px;min-width:210px}
+.settings-note{
+  margin-top:16px;
+  padding:13px 15px;
+  border-radius:13px;
+  background:linear-gradient(135deg,#f8fafc,#eff6ff);
+  border:1px solid #dbeafe;
+  color:#475569;
+  font-size:12px;
+}
+.maintenance-hero{
+  border:1px solid #bae6fd!important;
+  background:linear-gradient(135deg,#eff6ff 0%,#ecfeff 55%,#eef2ff 100%)!important;
+  box-shadow:0 12px 28px rgba(37,99,235,.08);
+}
+.maintenance-status.on{box-shadow:0 5px 14px rgba(34,197,94,.16)}
+.maintenance-status.off{box-shadow:0 5px 14px rgba(239,68,68,.10)}
+.maintenance-actions .secondary{
+  border:1px solid #bfdbfe;
+  background:#eff6ff;
+  color:#1d4ed8;
+}
+.table-wrap{border-color:#dbe5f1!important;box-shadow:0 8px 22px rgba(15,23,42,.04)}
+thead{background:linear-gradient(135deg,#eff6ff,#f8fafc)!important}
+th{color:#334155!important}
+.approve{background:linear-gradient(135deg,#16a34a,#059669)!important;color:#fff!important}
+.reject{background:linear-gradient(135deg,#dc2626,#be123c)!important;color:#fff!important}
+.secondary:hover{filter:brightness(.98);transform:translateY(-1px)}
+
+/* Login remains the only visible screen before authentication. */
+body.auth-locked{background:radial-gradient(circle at 50% 0%,#dbeafe 0,#eff6ff 38%,#e2e8f0 100%)!important}
+body.auth-locked .login-panel{
+  border:1px solid rgba(147,197,253,.55)!important;
+  box-shadow:0 28px 75px rgba(15,23,42,.14)!important;
+}
+
+@media(max-width:900px){
+  .topbar{padding:0 14px!important}
+  .admin-content .section{margin:14px 12px!important}
+}
+@media(max-width:640px){
+  .topbar{height:66px!important}
+  .logout-top{padding:9px 12px!important;font-size:11px!important}
+  .section-head{padding-bottom:12px}
+  .section-badge{display:none}
+  .save-store-btn{width:100%}
 }
