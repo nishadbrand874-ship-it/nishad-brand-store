@@ -8,13 +8,27 @@ function toggleMenu(){
   if(window.innerWidth<=900){m.classList.toggle('mobile-open');}
 }
 function showSection(id){
-  document.querySelectorAll('.section').forEach(x=>x.classList.add('hidden'));
-  const target=$(id); if(target) target.classList.remove('hidden');
-  document.querySelectorAll('#menu .sidebar-nav button').forEach(b=>b.classList.toggle('active',b.dataset.section===id));
-  if(window.innerWidth<=900) $('menu').classList.remove('mobile-open');
-  window.scrollTo({top:0,behavior:'smooth'});
+  const sections=[...document.querySelectorAll('.admin-content .section')];
+  let found=false;
+  sections.forEach(section=>{
+    const active=section.id===id;
+    section.classList.toggle('hidden',!active);
+    section.setAttribute('aria-hidden',String(!active));
+    if(active) found=true;
+  });
+  document.querySelectorAll('#menu .sidebar-nav button').forEach(btn=>{
+    btn.classList.toggle('active',btn.dataset.section===id);
+    btn.setAttribute('aria-current',btn.dataset.section===id?'page':'false');
+  });
+  if(window.innerWidth<=900){
+    const menu=$('menu');
+    if(menu) menu.classList.remove('mobile-open');
+  }
+  if(found) window.scrollTo({top:0,behavior:'smooth'});
   if(id==='maintenanceSec') updateMaintenanceStatus();
+  return found;
 }
+
 async function login(){const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('user').value,password:$('pass').value})});const d=await r.json();if(r.ok){document.body.classList.remove('auth-locked');$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}else $('msg').textContent=d.error||'Login failed';}
 async function logout(){
   // Logout in one click: stop client activity immediately, clear the server cookie,
@@ -43,7 +57,8 @@ function startOrdersAutoRefresh(){
       const d=await r.json();
       const ordersSection=$('orders');
       if(ordersSection && !ordersSection.classList.contains('hidden')) $('ordersTable').innerHTML=ordersTable(d.orders||[]);
-      if($('dash')) $('dash').innerHTML=renderDashboardStats(d);
+      if($('dash')) showSection('overview');
+  $('dash').innerHTML=renderDashboardStats(d);
       const s=d.settings||{};
       if($('m_maintenance_mode')){
         $('m_maintenance_mode').checked=s.maintenance_mode==='true';
@@ -173,5 +188,6 @@ async function saveBonusPurchaseQty(){
   load();
 }
 async function manualBonusRelease(){const utr=String($('manualBonusUtr')?.value||'').trim();if(!utr)return alert('UTR डालें.');if(!confirm('इस UTR पर 1 bonus ID manually release करनी है?'))return;const r=await fetch('/api/admin/manual-bonus-release/'+encodeURIComponent(utr),{method:'POST'});const d=await r.json().catch(()=>({}));const out=$('manualBonusResult');if(r.ok){out.innerHTML='<div class=\"manual-success\">✓ Bonus ID released successfully.<br><b>Login:</b> '+esc(d.bonus?.login_id||'')+'<br><b>Password:</b> '+esc(d.bonus?.login_password||'')+'</div>';$('manualBonusUtr').value='';load();}else{if(out)out.innerHTML='<div class=\"manual-error\">'+esc(d.error||'Manual bonus release failed')+'</div>';}}
+if(document.body.classList.contains('auth-locked')){} else { showSection('overview'); }
 $('assets').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/admin/assets',{method:'POST',body:new FormData($('assets'))});alert(r.ok?'Assets uploaded.':'Upload failed');if(r.ok)load();};
 fetch('/api/admin/me').then(r=>{if(r.ok){document.body.classList.remove('auth-locked');$('login').classList.add('hidden');$('panel').classList.remove('hidden');load();startOrdersAutoRefresh();}});

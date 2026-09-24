@@ -79,7 +79,7 @@ body{background:radial-gradient(circle at 70% 0%,rgba(59,130,246,.14),transparen
 .topbar-left{display:flex;align-items:center;gap:12px}
 .mobile-menu-btn{display:none;border:0;background:rgba(255,255,255,.12);color:#fff;border-radius:11px;padding:10px 12px;font-size:18px;cursor:pointer}
 .menu{position:fixed!important;left:0!important;right:auto!important;top:0!important;width:276px!important;height:100vh!important;padding:0!important;border:0!important;border-radius:0!important;background:linear-gradient(180deg,#06132d 0%,#091b3b 48%,#07152f 100%)!important;box-shadow:12px 0 45px rgba(2,12,35,.20)!important;z-index:50;display:flex;flex-direction:column;overflow-y:auto;backdrop-filter:none!important}
-.menu.hidden{display:flex!important}
+.menu.hidden{display:none!important}
 .sidebar-head{height:92px;display:flex;align-items:center;gap:12px;padding:18px 18px;border-bottom:1px solid rgba(255,255,255,.08)}
 .sidebar-logo{width:50px;height:50px;border-radius:14px;padding:2px;background:linear-gradient(135deg,#38bdf8,#2563eb);box-shadow:0 8px 22px rgba(37,99,235,.25)}
 .sidebar-logo img{width:100%;height:100%;object-fit:cover;border-radius:12px;background:#fff}
@@ -101,7 +101,6 @@ body{background:radial-gradient(circle at 70% 0%,rgba(59,130,246,.14),transparen
 .sidebar-logout:hover{background:rgba(239,68,68,.16);color:#fff}
 .admin-content{margin-left:276px;padding-top:74px}
 .admin-content .section{max-width:none;margin:20px 24px}
-.voice-status{position:fixed;right:20px;top:84px;z-index:24;border-radius:999px;padding:6px 12px;background:rgba(7,21,47,.78);color:#dbeafe;backdrop-filter:blur(8px)}
 .logout-top{background:linear-gradient(135deg,#334155,#1e293b)!important}
 .maintenance-hero{display:flex;align-items:center;gap:16px;padding:18px;border-radius:18px;border:1px solid #bfdbfe;background:linear-gradient(135deg,#eff6ff,#f0fdfa);margin-bottom:18px}
 .maintenance-icon{width:54px;height:54px;display:grid;place-items:center;border-radius:16px;background:linear-gradient(135deg,#2563eb,#0891b2);font-size:25px;box-shadow:0 10px 25px rgba(37,99,235,.18)}
@@ -118,8 +117,8 @@ body{background:radial-gradient(circle at 70% 0%,rgba(59,130,246,.14),transparen
 .maintenance-actions span{font-size:11px;color:#64748b}
 .maintenance-tip{margin-top:15px;padding:12px 14px;border-radius:12px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12px}
 @media(max-width:900px){
-  .topbar{left:0}.admin-content{margin-left:0}.menu{transform:translateX(-100%);transition:transform .22s ease}.menu.mobile-open{transform:translateX(0)}.menu.hidden{display:flex!important}
-  .mobile-menu-btn{display:inline-flex}.topbar .brand{display:none}.voice-status{top:82px;right:10px}
+  .topbar{left:0}.admin-content{margin-left:0}.menu{transform:translateX(-100%);transition:transform .22s ease}.menu.mobile-open{transform:translateX(0)}.menu.hidden{display:none!important}
+  .mobile-menu-btn{display:inline-flex}.topbar .brand{display:none}
 }
 @media(max-width:640px){
   .topbar{height:66px;padding:0 10px}.top-actions{gap:5px}.logout-top{display:inline-flex}.menu-btn{padding:9px 10px;font-size:11px}
