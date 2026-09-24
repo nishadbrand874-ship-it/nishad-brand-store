@@ -57,8 +57,7 @@ function startOrdersAutoRefresh(){
       const d=await r.json();
       const ordersSection=$('orders');
       if(ordersSection && !ordersSection.classList.contains('hidden')) $('ordersTable').innerHTML=ordersTable(d.orders||[]);
-      if($('dash')) showSection('overview');
-  $('dash').innerHTML=renderDashboardStats(d);
+      if($('dash')) $('dash').innerHTML=renderDashboardStats(d);
       const s=d.settings||{};
       if($('m_maintenance_mode')){
         $('m_maintenance_mode').checked=s.maintenance_mode==='true';
