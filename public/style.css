@@ -795,3 +795,5 @@ body.stock-empty-mode .check{margin-top:10px}
 #utrCheckSection,#bonusClaimSection{scroll-margin-top:105px}
 @media(max-width:600px){.header-actions{gap:6px}.manage-btn{padding:8px 10px!important;font-size:11px!important}.header-badge{display:none}.manage-menu{right:0;width:180px}}
 .old-price{text-decoration:line-through;opacity:.58;font-size:.8em;margin-right:5px}.save-text{font-size:12px;font-weight:900;color:#16a34a;margin-top:-3px;margin-bottom:8px}
+
+.social-float{position:fixed;right:14px;bottom:14px;z-index:8;display:flex;flex-direction:column;align-items:flex-end;gap:8px}.social-float .whatsapp{position:static}.whatsapp-channel{padding:9px 12px;border-radius:999px;background:#25d366;color:#fff;text-decoration:none;font-size:10px;font-weight:900;box-shadow:0 8px 20px rgba(37,211,102,.28);white-space:nowrap}.social-float .hidden{display:none!important}@media(max-width:600px){.social-float{right:9px;bottom:9px}.whatsapp-channel{font-size:9px;padding:8px 10px}}

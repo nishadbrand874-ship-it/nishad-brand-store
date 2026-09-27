@@ -283,7 +283,7 @@ function publicSettings(s, stock=0){
     };
   });
   const bonusPurchaseQty = Math.max(1, Math.min(100000, parseInt(s.bonus_purchase_qty,10) || 10));
-  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim(), bonusOfferEnabled:s.bonus_offer_enabled!=='false', bonusPurchaseQty};
+  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', whatsapp_channel:s.whatsapp_channel||'', logo:s.logo_data||'/dp.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim(), bonusOfferEnabled:s.bonus_offer_enabled!=='false', bonusPurchaseQty};
 }
 
 app.post('/api/site-verify', rateLimit(apiHits,60*1000,30), async (req,res)=>{
@@ -342,7 +342,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 });
 
 app.post('/api/admin/settings',auth,adminMutationGuard,async(req,res)=>{
-  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled','bonus_purchase_qty','maintenance_mode',
+  const allowed=['site_name','whatsapp_number','whatsapp_channel','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled','bonus_purchase_qty','maintenance_mode',
     'package_discount_1','package_discount_2','package_discount_5','package_discount_10','package_discount_15','package_discount_20'];
   if(req.body.bonus_purchase_qty!==undefined){
     const qty=Number(req.body.bonus_purchase_qty);

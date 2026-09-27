@@ -105,8 +105,8 @@ function updateBonusCopy(){
 async function init(){
   try{
     const r=await fetch('/api/config?ts='+Date.now(),{cache:'no-store'}); config=await r.json(); updateBonusCopy(); const cb=document.querySelector('.claim-box'); if(cb) cb.classList.toggle('hidden', String(config.bonusOfferEnabled||'true')!=='true'); if(!r.ok) throw new Error(config.error||'Configuration failed');
-    $('siteName').textContent=config.siteName||'NISHAD BRAND'; $('logo').src=config.logo||'/logo.png';
-    $('wa').href='https://wa.me/'+String(config.whatsapp||'').replace(/\D/g,'');
+    $('siteName').textContent=config.siteName||'NISHAD BRAND'; $('logo').src=config.logo||'/dp.png'; $('logo').onerror=function(){this.onerror=null;this.src='/logo.png';};
+    $('wa').href='https://wa.me/'+String(config.whatsapp||'').replace(/\D/g,''); const wac=$('waChannel'); if(wac){ const link=String(config.whatsapp_channel||'').trim(); wac.href=link||'#'; wac.classList.toggle('hidden',!link); wac.setAttribute('aria-hidden',link?'false':'true'); }
     const sb=$('stockBanner'); if(sb){ const realStock=Number(config.stock||0); sb.className=realStock>0?'stock-banner in':'stock-banner out empty-stock-notice'; sb.innerHTML=realStock>0?'✓ ID STOCK AVAILABLE • '+realStock+' ID<span class=\"stock-capacity-indicator\" aria-label=\"Stock level\"><span class=\"stock-capacity-fill\"></span></span>':'<span class=\"out-stock-mark\">×</span><span>OUT OF STOCK</span><span class=\"coming-soon\">MORE ID COMING SOON</span>';
       if(realStock>0){ const fill=sb.querySelector('.stock-capacity-fill'); if(fill) fill.style.width=(Math.max(0,Math.min(10,realStock))/10*100)+'%'; } document.querySelector('.store-section')?.classList.toggle('empty-stock', realStock<=0); document.body.classList.toggle('stock-empty-mode', realStock<=0); }
     const newsBar=$('newsBar'),newsText=$('newsText');
