@@ -86,11 +86,18 @@ const MAINTENANCE_PREVIEW_KEY = String(process.env.MAINTENANCE_PREVIEW_KEY || ''
 // Maintenance mode: keep the storefront available for a private preview while
 // showing customers the maintenance page. APIs and admin routes remain available
 // so the owner can continue checking the system.
-function maintenanceGate(req,res,next){
-  if(!MAINTENANCE_MODE) return next();
-  const isPreview = MAINTENANCE_PREVIEW_KEY && String(req.query.preview || '') === MAINTENANCE_PREVIEW_KEY;
-  if(req.path.startsWith('/api/') || req.path.startsWith('/admin') || req.path === '/maintenance' || isPreview) return next();
-  return res.sendFile(path.join(__dirname,'public','maintenance.html'));
+async function maintenanceGate(req,res,next){
+  try{
+    const isPreview = MAINTENANCE_PREVIEW_KEY && String(req.query.preview || '') === MAINTENANCE_PREVIEW_KEY;
+    if(req.path.startsWith('/api/') || req.path.startsWith('/admin') || req.path === '/maintenance' || isPreview) return next();
+    let enabled = MAINTENANCE_MODE;
+    try {
+      const r = await pool.query("SELECT value FROM settings WHERE key='maintenance_mode' LIMIT 1");
+      if(r.rows[0]) enabled = /^(1|true|on|yes)$/i.test(String(r.rows[0].value));
+    } catch(e) {}
+    if(!enabled) return next();
+    return res.sendFile(path.join(__dirname,'public','maintenance.html'));
+  }catch(e){ return next(); }
 }
 app.use(maintenanceGate);
 if (!process.env.DATABASE_URL) {
@@ -254,6 +261,7 @@ async function normalizeStorePrice(){ try {
   }
   await q("INSERT INTO settings(key,value) VALUES ('bonus_offer_enabled','true') ON CONFLICT(key) DO NOTHING");
   await q("INSERT INTO settings(key,value) VALUES ('bonus_purchase_qty','10') ON CONFLICT(key) DO NOTHING");
+  await q("INSERT INTO settings(key,value) VALUES ('maintenance_mode',$1) ON CONFLICT(key) DO NOTHING", [MAINTENANCE_MODE ? 'true' : 'false']);
  } catch(e) { console.warn('Price/bonus initialization skipped:', e.message); } }
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
 async function settings(){ const r=await q('SELECT key,value FROM settings'); return Object.fromEntries(r.rows.map(x=>[x.key,x.value])); }
@@ -334,7 +342,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 });
 
 app.post('/api/admin/settings',auth,adminMutationGuard,async(req,res)=>{
-  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled','bonus_purchase_qty',
+  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled','bonus_purchase_qty','maintenance_mode',
     'package_discount_1','package_discount_2','package_discount_5','package_discount_10','package_discount_15','package_discount_20'];
   if(req.body.bonus_purchase_qty!==undefined){
     const qty=Number(req.body.bonus_purchase_qty);

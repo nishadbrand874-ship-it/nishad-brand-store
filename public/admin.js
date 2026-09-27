@@ -180,6 +180,19 @@ function stopVoiceControl(){
 }
 function toggleVoiceControl(){voiceControlOn?stopVoiceControl():startVoiceControl();}
 
+function renderMaintenanceManagement(s){
+  const on=String(s.maintenance_mode||'false').toLowerCase()==='true';
+  return '<div class="maintenance-control '+(on?'on':'off')+'"><div><b>'+ (on?'Maintenance is ON':'Maintenance is OFF') +'</b><span>'+ (on?'Customers currently see the maintenance page.':'Customers can use the normal store website.') +'</span></div><button class="maintenance-toggle '+(on?'on':'off')+'" onclick="toggleMaintenance('+(on?'false':'true')+')">'+(on?'🟢 Turn OFF':'🔴 Turn ON')+'</button></div><div class="maintenance-note">Preview/admin routes remain available while Maintenance is ON.</div>';
+}
+async function toggleMaintenance(value){
+  try{
+    const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({maintenance_mode:String(value)})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error||'Could not update maintenance');
+    await load();
+    showSection('maintenanceSec');
+  }catch(e){ alert(e.message||'Maintenance update failed'); }
+}
 function statusBadge(s){const map={payment_received:['PENDING APPROVAL','pending'],approved:['APPROVED','approved'],paid:['APPROVED','approved'],rejected:['REJECTED','rejected'],created:['WAITING PAYMENT','created']};const a=map[s]||[String(s).toUpperCase(), 'created'];return '<span class="badge '+a[1]+'">'+a[0]+'</span>';}
 function renderDashboardStats(d){const t=d.today||{};return '<div class="stat today-sold"><span>🛒 Today Sold IDs</span><b>'+Number(t.today_sold_ids||0)+'</b><small>आज बिके हुए IDs</small></div><div class="stat today-added"><span>➕ Today IDs Added</span><b>'+Number(t.today_ids_added||0)+'</b><small>आज stock में जोड़े गए</small></div><div class="stat today-rejected"><span>❌ Today Reject</span><b>'+Number(t.today_rejected||0)+'</b><small>आज rejected payments</small></div><div class="stat today-approved"><span>✅ Today Approve</span><b>'+Number(t.today_approved||0)+'</b><small>आज approved payments</small></div><div class="stat"><span>📦 Available IDs</span><b>'+Number(d.stock||0)+'</b><small>Current stock</small></div><div class="stat"><span>📊 Total Sold IDs</span><b>'+Number(d.sold||0)+'</b><small>All-time sold</small></div><div class="stat"><span>⏳ Pending Approval</span><b>'+(d.orders||[]).filter(x=>x.status==='payment_received').length+'</b><small>Waiting for admin</small></div><div class="stat"><span>🧾 Recent Orders</span><b>'+(d.orders||[]).length+'</b><small>Latest 100 orders</small></div>';}
 function speakPaymentRequest(){
@@ -251,7 +264,7 @@ $('dash').innerHTML=renderDashboardStats(d);
 const s=d.settings||{};window.bonusOfferEnabled=s.bonus_offer_enabled!=='false';$('settings').innerHTML='<div class="gateway-tip">📱 <b>UPI QR:</b> हर order में खरीदी गई ID की संख्या के हिसाब से exact amount वाला UPI QR अपने आप बनेगा. Payment के बाद customer UTR submit करेगा और आप manually approve करेंगे.</div><div class="formgrid">'+[['site_name','Site Name'],['whatsapp_number','WhatsApp Number'],['price_per_id','Price per ID'],['upi_vpa','UPI ID / VPA'],['upi_name','UPI Payee Name']].map(([k,l])=>'<label>'+l+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>').join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows="4" placeholder="Store news यहाँ लिखें...">'+esc(s.news||'')+'</textarea></label>';
 $('ordersTable').innerHTML=ordersTable(d.orders||[]);
 $('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);
-$('bonusManage').innerHTML=renderBonusManagement(s);$('discountManage').innerHTML=renderPackageDiscountManagement(s);}
+$('bonusManage').innerHTML=renderBonusManagement(s);$('discountManage').innerHTML=renderPackageDiscountManagement(s);$('maintenanceManage').innerHTML=renderMaintenanceManagement(s);}
 function ordersTable(rows){
   // Payment Approvals में केवल UTR/payment submit किए हुए orders दिखाएँ.
   // WAITING PAYMENT (created) orders user के order-check flow में रहेंगे,
