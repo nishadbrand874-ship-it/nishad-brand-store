@@ -42,7 +42,7 @@ INSERT INTO settings(key,value) VALUES
 ('whatsapp_number','9296271001'),
 ('logo_data',''),
 ('qr_data',''),
-('news',''),('upi_vpa','Q127502433@ybl'),('upi_name','PhonePeMerchant')
+('news',''),('maintenance_mode','false'),('maintenance_message','Website maintenance में है। कृपया थोड़ी देर बाद दोबारा कोशिश करें।'),('whatsapp_channel','https://whatsapp.com/channel/0029Vb70ysjKGGGJCEavqD3h'),('upi_vpa','Q127502433@ybl'),('upi_name','PhonePeMerchant')
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO settings(key,value) VALUES
