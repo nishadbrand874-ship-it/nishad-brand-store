@@ -188,7 +188,11 @@ function showIDs(items,order){
   const list=Array.isArray(items)?items:[];
   const rows=credentialRows(list,'ID ');
   const empty=list.length===0;
-  $('payStatus').innerHTML='<div class="success"><b>✅ Payment Success</b>'+(!empty?'<div class="copy-all-wrap">'+copyAllButton(list,'📋 Copy All IDs & Passwords')+'</div>'+rows:'<div class="pending" style="margin-top:10px">ID/Password loading…</div>')+'</div>';
+  // Keep the result in the visible UTR area. The legacy #payStatus element is
+  // intentionally hidden by the current stylesheet, so rendering credentials
+  // there makes Payment Success appear without the ID/password.
+  $('utrMsg').innerHTML='<div class="success payment-success-result"><b>✅ Payment Success</b>'+(!empty?'<div class="copy-all-wrap">'+copyAllButton(list,'📋 Copy All IDs & Passwords')+'</div>'+rows:'<div class="pending" style="margin-top:10px">ID/Password loading…</div>')+'</div>';
+  $('payStatus').innerHTML='';
   const box=document.querySelector('.qr-box');
   if(box){
     requestAnimationFrame(()=>{
