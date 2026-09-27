@@ -135,6 +135,7 @@ async function startQrPayment(){
 }
 async function submitUTR(){
   const utr=$('utrInput').value.trim();
+  window.lastSubmittedUtr=utr;
   if(!/^[A-Za-z0-9]{8,35}$/.test(utr)){$('utrMsg').innerHTML='<div class="error">UTR / Transaction ID 8–35 letters/digits का होना चाहिए.</div>';return;}
   const orderId=window.currentOrderId;
   if(!orderId){$('utrMsg').innerHTML='<div class="error">Order session नहीं मिला. Buy Now फिर से करें.</div>';return;}
@@ -154,7 +155,23 @@ async function checkQrStatus(orderId){
   try{
     const r=await fetch('/api/payment/qr-status/'+encodeURIComponent(orderId),{cache:'no-store',headers:{'X-Order-Token':String(window.currentOrderToken||'')}}); const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Verification failed');
-     if(d.status==='approved' || d.status==='paid'){stopPolling();$('utrMsg').innerHTML='<div class="success"><b>✅ Payment Success</b></div>';showIDs(d.items,d.order);return;}
+     if(d.status==='approved' || d.status==='paid'){
+       stopPolling();
+       $('utrMsg').innerHTML='<div class="success"><b>✅ Payment Success</b></div>';
+       let items=Array.isArray(d.items)?d.items:[];
+       // Some deployments can return approval before the credential payload is
+       // attached. Fetch the approved order once more by the submitted UTR so
+       // the released ID/password is always rendered below Payment Success.
+       if(!items.length && window.lastSubmittedUtr){
+         try{
+           const rr=await fetch('/api/order-check/'+encodeURIComponent(window.lastSubmittedUtr),{cache:'no-store'});
+           const rd=await rr.json();
+           if(Array.isArray(rd.items)) items=rd.items;
+         }catch(e){console.warn('Credential fallback fetch:',e);}
+       }
+       showIDs(items,d.order);
+       return;
+     }
      if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="payment-processing"><span class="payment-spinner" aria-hidden="true"></span><div><b>Payment Processing...</b><br><small>Please wait...</small></div></div>'; $('utrMsg').innerHTML='<div class="payment-processing"><span class="payment-spinner" aria-hidden="true"></span><div><b>Payment Processing...</b><br><small>Payment verify ho raha hai. Please wait.</small></div></div>'; return; }
     if(d.status==='rejected'){ stopPolling(); const msg='<div class="error">Your UTR / Transaction ID was rejected.</div>'; $('payStatus').innerHTML=msg; $('utrMsg').innerHTML=msg; return; }if(d.status==='expired'){stopPolling();$('payStatus').innerHTML='<div class="error">QR expired. Please click Buy Now again to generate a new QR.</div>';return;}
   }catch(e){console.warn(e);}
@@ -167,7 +184,19 @@ function copyButton(value,label){const safe=JSON.stringify(String(value??'')).re
 function copyAllCredentials(items,btn){const list=(items||[]);if(!list.length)return;const text=list.map((x,i)=>{const parts=['ID '+(i+1)+': '+String(x.login_id??'')];if(x.login_password)parts.push('Password: '+String(x.login_password));if(x.extra_data)parts.push(String(x.extra_data));return parts.join('\n');}).join('\n\n');copyCredential(text,btn);}
 function copyAllButton(items,label='📋 Copy All'){const encoded=JSON.stringify(items||[]).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');return '<button type="button" class="copy-all-cred" onclick="copyAllCredentials('+encoded+',this)">'+label+'</button>';}
 function credentialRows(items,prefix){return (items||[]).map((x,i)=>'<div class="idrow"><div class="cred-line"><b>'+prefix+(i+1)+':</b> <code>'+esc(x.login_id)+'</code>'+copyButton(x.login_id,'📋 Copy ID')+'</div>'+(x.login_password?'<div class="cred-line"><b>Password:</b> <code>'+esc(x.login_password)+'</code>'+copyButton(x.login_password,'📋 Copy Password')+'</div>':'')+(x.extra_data?'<div class="cred-extra">'+esc(x.extra_data)+'</div>':'')+'</div>').join('');}
-function showIDs(items,order){const list=Array.isArray(items)?items:[];const rows=credentialRows(list,'ID ');$('payStatus').innerHTML='<div class="success"><b>✅ Payment Success</b><div class="copy-all-wrap">'+copyAllButton(list,'📋 Copy All IDs & Passwords')+'</div>'+rows+'</div>';const box=document.querySelector('.qr-box');if(box){requestAnimationFrame(()=>{box.scrollTop=box.scrollHeight;});}}
+function showIDs(items,order){
+  const list=Array.isArray(items)?items:[];
+  const rows=credentialRows(list,'ID ');
+  const empty=list.length===0;
+  $('payStatus').innerHTML='<div class="success"><b>✅ Payment Success</b>'+(!empty?'<div class="copy-all-wrap">'+copyAllButton(list,'📋 Copy All IDs & Passwords')+'</div>'+rows:'<div class="pending" style="margin-top:10px">ID/Password loading…</div>')+'</div>';
+  const box=document.querySelector('.qr-box');
+  if(box){
+    requestAnimationFrame(()=>{
+      box.scrollTop=box.scrollHeight;
+      setTimeout(()=>{box.scrollTop=box.scrollHeight;},120);
+    });
+  }
+}
 
 async function claimBonus(){
   const el=$('claimUtr'), out=$('claimResult');
