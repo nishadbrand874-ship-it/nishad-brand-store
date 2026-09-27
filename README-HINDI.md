@@ -165,3 +165,10 @@ NISHAD BRAND storefront हर 3 सेकंड में `/api/config` से 
 - A reused UTR, wrong UTR, wrong amount, rejected order, or unknown UTR does not release inventory.
 - `MOBILE_APP_TOKEN` must be stored in Render Environment Variables and kept out of source control.
 - SMS is a reconciliation signal; for stronger payment assurance, pair this with a bank/PSP/gateway server-side transaction-status API.
+
+
+### Maintenance Mode
+- `MAINTENANCE_MODE=true` → customer storefront par maintenance page show hoga.
+- Admin aur `/api/*` routes available rahenge.
+- `MAINTENANCE_PREVIEW_KEY` set karke private preview URL use kar sakte hain: `/?preview=KEY`.
+- `MAINTENANCE_MODE` unset/false rahe to normal website chalegi.

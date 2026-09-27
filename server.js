@@ -80,6 +80,19 @@ app.use((req,res,next)=>{
   next();
 });
 const PORT = process.env.PORT || 3000;
+const MAINTENANCE_MODE = /^(1|true|on|yes)$/i.test(String(process.env.MAINTENANCE_MODE || ''));
+const MAINTENANCE_PREVIEW_KEY = String(process.env.MAINTENANCE_PREVIEW_KEY || '').trim();
+
+// Maintenance mode: keep the storefront available for a private preview while
+// showing customers the maintenance page. APIs and admin routes remain available
+// so the owner can continue checking the system.
+function maintenanceGate(req,res,next){
+  if(!MAINTENANCE_MODE) return next();
+  const isPreview = MAINTENANCE_PREVIEW_KEY && String(req.query.preview || '') === MAINTENANCE_PREVIEW_KEY;
+  if(req.path.startsWith('/api/') || req.path.startsWith('/admin') || req.path === '/maintenance' || isPreview) return next();
+  return res.sendFile(path.join(__dirname,'public','maintenance.html'));
+}
+app.use(maintenanceGate);
 if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL is not configured. Add the Render PostgreSQL connection string in Environment Variables.');
   process.exit(1);
