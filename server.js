@@ -110,8 +110,15 @@ app.use(cookieParser());
 app.use((req,res,next)=>{ if(req.path.startsWith('/api/')) res.set('Cache-Control','no-store'); next(); });
 
 // Serve the storefront with the Turnstile Site Key embedded for the first-load gate.
-app.get('/', (req,res)=>{
+app.get('/', async (req,res)=>{
   try {
+    const s=await settings();
+    if(s.maintenance_enabled==='true'){
+      const channel=String(s.whatsapp_channel||'').trim();
+      const button=channel?`<a class=\"wa-channel\" href=\"${channel.replace(/\"/g,'&quot;')}\" target=\"_blank\" rel=\"noopener\">Join WhatsApp Channel</a>`:'';
+      res.set('Cache-Control','no-store');
+      return res.type('html').send(`<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Under Maintenance</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(135deg,#07152f,#123d70);font-family:Arial,sans-serif;color:#fff;padding:20px;box-sizing:border-box}.box{width:min(520px,100%);text-align:center;padding:34px 24px;border-radius:24px;background:#ffffff12;border:1px solid #ffffff2b;box-shadow:0 20px 60px #0005;backdrop-filter:blur(10px)}.icon{font-size:42px;margin-bottom:8px}h1{margin:8px 0;font-size:30px}p{color:#dbeafe;margin:10px 0}.status{margin:20px auto;padding:12px 14px;border-radius:12px;background:#16a34a;color:#fff;font-weight:800;font-size:13px}.wa-channel{display:inline-block;margin-top:8px;padding:11px 16px;border-radius:12px;background:#25d366;color:#fff;text-decoration:none;font-weight:800}</style></head><body><div class=\"box\"><div class=\"icon\">🛠️</div><h1>Under Maintenance</h1><p>We're making things better for you</p><div class=\"status\">⚡ System upgrade in progress · Check back soon</div>${button}</div></body></html>`);
+    }
     const file=fs.readFileSync(path.join(__dirname,'public','index.html'),'utf8');
     const siteKey=String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim().replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/</g,'&lt;');
     res.set('Cache-Control','no-store');
@@ -241,6 +248,8 @@ async function normalizeStorePrice(){ try {
   }
   await q("INSERT INTO settings(key,value) VALUES ('bonus_offer_enabled','true') ON CONFLICT(key) DO NOTHING");
   await q("INSERT INTO settings(key,value) VALUES ('bonus_purchase_qty','10') ON CONFLICT(key) DO NOTHING");
+  await q("INSERT INTO settings(key,value) VALUES ('maintenance_enabled','false') ON CONFLICT(key) DO NOTHING");
+  await q("INSERT INTO settings(key,value) VALUES ('whatsapp_channel','') ON CONFLICT(key) DO NOTHING");
  } catch(e) { console.warn('Price/bonus initialization skipped:', e.message); } }
 async function setting(key){ const r=await q('SELECT value FROM settings WHERE key=$1',[key]); return r.rows[0]?.value || ''; }
 async function settings(){ const r=await q('SELECT key,value FROM settings'); return Object.fromEntries(r.rows.map(x=>[x.key,x.value])); }
@@ -262,7 +271,7 @@ function publicSettings(s, stock=0){
     };
   });
   const bonusPurchaseQty = Math.max(1, Math.min(100000, parseInt(s.bonus_purchase_qty,10) || 10));
-  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim(), bonusOfferEnabled:s.bonus_offer_enabled!=='false', bonusPurchaseQty};
+  return {siteName:s.site_name||'NISHAD BRAND', whatsapp:s.whatsapp_number||'', whatsappChannel:s.whatsapp_channel||'', logo:s.logo_data||'/logo.png', qr:s.qr_data||'/payment-qr.png', news:s.news||'', pricePerId:basePrice, packages, stock, turnstileSiteKey:String(process.env.CLOUDFLARE_TURNSTILE_SITE_KEY||'').trim(), bonusOfferEnabled:s.bonus_offer_enabled!=='false', bonusPurchaseQty};
 }
 
 app.post('/api/site-verify', rateLimit(apiHits,60*1000,30), async (req,res)=>{
@@ -321,7 +330,7 @@ app.get('/api/admin/dashboard',auth,async(req,res)=>{
 });
 
 app.post('/api/admin/settings',auth,adminMutationGuard,async(req,res)=>{
-  const allowed=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled','bonus_purchase_qty',
+  const allowed=['site_name','whatsapp_number','whatsapp_channel','maintenance_enabled','price_per_id','upi_vpa','upi_name','news','bonus_offer_enabled','bonus_purchase_qty',
     'package_discount_1','package_discount_2','package_discount_5','package_discount_10','package_discount_15','package_discount_20'];
   if(req.body.bonus_purchase_qty!==undefined){
     const qty=Number(req.body.bonus_purchase_qty);
