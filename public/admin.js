@@ -180,19 +180,6 @@ function stopVoiceControl(){
 }
 function toggleVoiceControl(){voiceControlOn?stopVoiceControl():startVoiceControl();}
 
-function renderMaintenanceManagement(s){
-  const on=String(s.maintenance_mode||'false').toLowerCase()==='true';
-  return '<div class="maintenance-control '+(on?'on':'off')+'"><div><b>'+ (on?'Maintenance is ON':'Maintenance is OFF') +'</b><span>'+ (on?'Customers currently see the maintenance page.':'Customers can use the normal store website.') +'</span></div><button class="maintenance-toggle '+(on?'on':'off')+'" onclick="toggleMaintenance('+(on?'false':'true')+')">'+(on?'🟢 Turn OFF':'🔴 Turn ON')+'</button></div><div class="maintenance-note">Preview/admin routes remain available while Maintenance is ON.</div>';
-}
-async function toggleMaintenance(value){
-  try{
-    const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({maintenance_mode:String(value)})});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(d.error||'Could not update maintenance');
-    await load();
-    showSection('maintenanceSec');
-  }catch(e){ alert(e.message||'Maintenance update failed'); }
-}
 function statusBadge(s){const map={payment_received:['PENDING APPROVAL','pending'],approved:['APPROVED','approved'],paid:['APPROVED','approved'],rejected:['REJECTED','rejected'],created:['WAITING PAYMENT','created']};const a=map[s]||[String(s).toUpperCase(), 'created'];return '<span class="badge '+a[1]+'">'+a[0]+'</span>';}
 function renderDashboardStats(d){const t=d.today||{};return '<div class="stat today-sold"><span>🛒 Today Sold IDs</span><b>'+Number(t.today_sold_ids||0)+'</b><small>आज बिके हुए IDs</small></div><div class="stat today-added"><span>➕ Today IDs Added</span><b>'+Number(t.today_ids_added||0)+'</b><small>आज stock में जोड़े गए</small></div><div class="stat today-rejected"><span>❌ Today Reject</span><b>'+Number(t.today_rejected||0)+'</b><small>आज rejected payments</small></div><div class="stat today-approved"><span>✅ Today Approve</span><b>'+Number(t.today_approved||0)+'</b><small>आज approved payments</small></div><div class="stat"><span>📦 Available IDs</span><b>'+Number(d.stock||0)+'</b><small>Current stock</small></div><div class="stat"><span>📊 Total Sold IDs</span><b>'+Number(d.sold||0)+'</b><small>All-time sold</small></div><div class="stat"><span>⏳ Pending Approval</span><b>'+(d.orders||[]).filter(x=>x.status==='payment_received').length+'</b><small>Waiting for admin</small></div><div class="stat"><span>🧾 Recent Orders</span><b>'+(d.orders||[]).length+'</b><small>Latest 100 orders</small></div>';}
 function speakPaymentRequest(){
@@ -261,10 +248,10 @@ function stopOrdersAutoRefresh(){
 async function load(){const r=await fetch('/api/admin/dashboard?ts='+Date.now(),{cache:'no-store'});if(!r.ok){$('panel').classList.add('hidden');$('login').classList.remove('hidden');return;}const d=await r.json();
 checkForNewPaymentRequests(d.orders||[]);
 $('dash').innerHTML=renderDashboardStats(d);
-const s=d.settings||{};window.bonusOfferEnabled=s.bonus_offer_enabled!=='false';$('settings').innerHTML='<div class="gateway-tip">📱 <b>UPI QR:</b> हर order में खरीदी गई ID की संख्या के हिसाब से exact amount वाला UPI QR अपने आप बनेगा. Payment के बाद customer UTR submit करेगा और आप manually approve करेंगे.</div><div class="formgrid">'+[['site_name','Site Name'],['whatsapp_number','WhatsApp Number'],['whatsapp_channel','WhatsApp Channel Link'],['price_per_id','Price per ID'],['upi_vpa','UPI ID / VPA'],['upi_name','UPI Payee Name']].map(([k,l])=>'<label>'+l+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>').join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows="4" placeholder="Store news यहाँ लिखें...">'+esc(s.news||'')+'</textarea></label>';
+const s=d.settings||{};window.bonusOfferEnabled=s.bonus_offer_enabled!=='false';$('settings').innerHTML='<div class="gateway-tip">📱 <b>UPI QR:</b> हर order में खरीदी गई ID की संख्या के हिसाब से exact amount वाला UPI QR अपने आप बनेगा. Payment के बाद customer UTR submit करेगा और आप manually approve करेंगे.</div><div class="formgrid">'+[['site_name','Site Name'],['whatsapp_number','WhatsApp Number'],['price_per_id','Price per ID'],['upi_vpa','UPI ID / VPA'],['upi_name','UPI Payee Name']].map(([k,l])=>'<label>'+l+'<input id="s_'+k+'" value="'+esc(s[k]||'')+'"></label>').join('')+'</div><label class="news-label">News / Announcement<textarea id="s_news" rows="4" placeholder="Store news यहाँ लिखें...">'+esc(s.news||'')+'</textarea></label>';
 $('ordersTable').innerHTML=ordersTable(d.orders||[]);
 $('inventoryTable').innerHTML='<h3>Current Inventory</h3>'+inventoryTable(d.inventory||[]);
-$('bonusManage').innerHTML=renderBonusManagement(s);$('discountManage').innerHTML=renderPackageDiscountManagement(s);$('maintenanceManage').innerHTML=renderMaintenanceManagement(s);}
+$('bonusManage').innerHTML=renderBonusManagement(s);$('discountManage').innerHTML=renderPackageDiscountManagement(s);}
 function ordersTable(rows){
   // Payment Approvals में केवल UTR/payment submit किए हुए orders दिखाएँ.
   // WAITING PAYMENT (created) orders user के order-check flow में रहेंगे,
@@ -298,7 +285,7 @@ async function approve(id){if(!confirm('Payment verify karke ID release karni ha
 async function rejectOrder(id){if(!confirm('Is payment ko reject karna hai?'))return;const r=await fetch('/api/admin/orders/'+encodeURIComponent(id)+'/reject',{method:'POST'});const d=await r.json();alert(r.ok?'Payment rejected.':d.error||'Reject failed');if(r.ok)load();}
 async function deleteID(id){if(!confirm('Available ID delete karein?'))return;const r=await fetch('/api/admin/inventory/'+id,{method:'DELETE'});if(r.ok)load();}
 async function addIDs(){const lines=$('ids').value.split('\n').map(x=>x.trim()).filter(Boolean);const items=lines.map(line=>{const p=line.split('|').map(x=>x.trim());return {login_id:p[0],login_password:p[1]||'',extra_data:p.slice(2).join(' | ')};});const r=await fetch('/api/admin/inventory',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});const d=await r.json();alert(r.ok?'IDs added successfully.':d.error||'Failed');if(r.ok){$('ids').value='';load();}}
-async function saveSettings(){const keys=['site_name','whatsapp_number','whatsapp_channel','price_per_id','upi_vpa','upi_name','news'];const body={};keys.forEach(k=>body[k]=$('s_'+k).value);body.price_per_id=String(Number(body.price_per_id));body.bonus_offer_enabled=window.bonusOfferEnabled?'true':'false';const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));alert(r.ok?'Settings saved. Website rate is now ₹'+Number(d.pricePerId||0).toLocaleString('en-IN')+' per ID.':'Failed: '+(d.error||'Unable to save'));if(r.ok)load();}
+async function saveSettings(){const keys=['site_name','whatsapp_number','price_per_id','upi_vpa','upi_name','news'];const body={};keys.forEach(k=>body[k]=$('s_'+k).value);body.price_per_id=String(Number(body.price_per_id));body.bonus_offer_enabled=window.bonusOfferEnabled?'true':'false';const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));alert(r.ok?'Settings saved. Website rate is now ₹'+Number(d.pricePerId||0).toLocaleString('en-IN')+' per ID.':'Failed: '+(d.error||'Unable to save'));if(r.ok)load();}
 window.bonusOfferEnabled=true;
 function toggleBonusOffer(){window.bonusOfferEnabled=!window.bonusOfferEnabled;const b=$('bonusToggle');if(b){b.className='bonus-toggle '+(window.bonusOfferEnabled?'on':'off');b.textContent=window.bonusOfferEnabled?'🟢 BONUS OFFER ON':'🔴 BONUS OFFER OFF';}saveSettings();}
 async function savePackageDiscounts(){
