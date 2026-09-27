@@ -798,3 +798,11 @@ body.stock-empty-mode .check{margin-top:10px}
 
 /* Payment text cleanup: hide dynamic payment status text below UTR. */
 .qr-status{display:none!important;}
+
+
+/* Payment verification processing animation */
+.payment-processing{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:10px;padding:14px 15px;border:1px solid #bfdbfe;border-radius:13px;background:#eff6ff;color:#1e3a8a;text-align:left;line-height:1.35}
+.payment-processing b{font-size:15px}.payment-processing small{font-size:11px;color:#64748b}
+.payment-spinner{display:inline-block;flex:0 0 28px;width:28px;height:28px;border:4px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:paymentSpin .8s linear infinite}
+@keyframes paymentSpin{to{transform:rotate(360deg)}}
+@media(max-width:600px){.payment-processing{margin:7px 9px;padding:11px 12px;gap:9px}.payment-processing b{font-size:13px}.payment-processing small{font-size:10px}.payment-spinner{flex-basis:24px;width:24px;height:24px;border-width:3px}}

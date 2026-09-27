@@ -143,7 +143,8 @@ async function submitUTR(){
     const r=await fetch('/api/orders/'+encodeURIComponent(orderId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':String(window.currentOrderToken||'')},body:JSON.stringify({utr,turnstileToken:getTurnstileToken()})});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'UTR submit failed');
-    $('utrMsg').innerHTML='<div class="pending"><b>UTR submitted for verification.</b><br>Actual payment SMS ke UTR + exact amount match hone par hi ID release hogi. Match na hone par order reject ho jayega.</div>';
+    $('utrMsg').innerHTML='<div class="payment-processing"><span class="payment-spinner" aria-hidden="true"></span><div><b>Payment Processing...</b><br><small>Payment verify ho raha hai. Please wait.</small></div></div>';
+    $('payStatus').innerHTML='<div class="payment-processing"><span class="payment-spinner" aria-hidden="true"></span><div><b>Payment Processing...</b><br><small>Please wait...</small></div></div>';
     $('utrBtn').disabled=true;
     resetTurnstile();
     await checkQrStatus(orderId);
@@ -153,8 +154,8 @@ async function checkQrStatus(orderId){
   try{
     const r=await fetch('/api/payment/qr-status/'+encodeURIComponent(orderId),{cache:'no-store',headers:{'X-Order-Token':String(window.currentOrderToken||'')}}); const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Verification failed');
-    if(d.status==='approved' || d.status==='paid'){stopPolling();$('utrMsg').innerHTML='<div class="success"><b>✅ PAYMENT APPROVED</b><br>Aapki payment approve ho gayi hai. Neeche ID delivery ho gayi hai.</div>';showIDs(d.items,d.order);return;}
-    if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="pending"><b>Payment verification pending</b><br>Merchant Verify app se UTR + exact amount match hone ka wait hai. Match na hone par order automatically reject hoga.<br><small>Payment details securely hidden.</small></div>'; return; }
+     if(d.status==='approved' || d.status==='paid'){stopPolling();$('utrMsg').innerHTML='<div class="success"><b>✅ Payment Success</b></div>';showIDs(d.items,d.order);return;}
+     if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="payment-processing"><span class="payment-spinner" aria-hidden="true"></span><div><b>Payment Processing...</b><br><small>Please wait...</small></div></div>'; $('utrMsg').innerHTML='<div class="payment-processing"><span class="payment-spinner" aria-hidden="true"></span><div><b>Payment Processing...</b><br><small>Payment verify ho raha hai. Please wait.</small></div></div>'; return; }
     if(d.status==='rejected'){ stopPolling(); const msg='<div class="error">Your UTR / Transaction ID was rejected.</div>'; $('payStatus').innerHTML=msg; $('utrMsg').innerHTML=msg; return; }if(d.status==='expired'){stopPolling();$('payStatus').innerHTML='<div class="error">QR expired. Please click Buy Now again to generate a new QR.</div>';return;}
   }catch(e){console.warn(e);}
 }
@@ -166,7 +167,7 @@ function copyButton(value,label){const safe=JSON.stringify(String(value??'')).re
 function copyAllCredentials(items,btn){const list=(items||[]);if(!list.length)return;const text=list.map((x,i)=>{const parts=['ID '+(i+1)+': '+String(x.login_id??'')];if(x.login_password)parts.push('Password: '+String(x.login_password));if(x.extra_data)parts.push(String(x.extra_data));return parts.join('\n');}).join('\n\n');copyCredential(text,btn);}
 function copyAllButton(items,label='📋 Copy All'){const encoded=JSON.stringify(items||[]).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');return '<button type="button" class="copy-all-cred" onclick="copyAllCredentials('+encoded+',this)">'+label+'</button>';}
 function credentialRows(items,prefix){return (items||[]).map((x,i)=>'<div class="idrow"><div class="cred-line"><b>'+prefix+(i+1)+':</b> <code>'+esc(x.login_id)+'</code>'+copyButton(x.login_id,'📋 Copy ID')+'</div>'+(x.login_password?'<div class="cred-line"><b>Password:</b> <code>'+esc(x.login_password)+'</code>'+copyButton(x.login_password,'📋 Copy Password')+'</div>':'')+(x.extra_data?'<div class="cred-extra">'+esc(x.extra_data)+'</div>':'')+'</div>').join('');}
-function showIDs(items,order){const rows=credentialRows(items,'ID ');$('payStatus').innerHTML='<div class="success"><b>✅ PAYMENT APPROVED — ID DELIVERY SUCCESSFUL</b><br>Admin approval ho gaya hai. Aapki ID neeche delivery ho gayi hai. ID aur Password yahin se mil jayega.<div class="copy-all-wrap">'+copyAllButton(items,'📋 Copy All IDs & Passwords')+'</div>'+rows+'</div>';}
+function showIDs(items,order){const rows=credentialRows(items,'ID ');$('payStatus').innerHTML='<div class="success"><b>✅ Payment Success</b><div class="copy-all-wrap">'+copyAllButton(items,'📋 Copy All IDs & Passwords')+'</div>'+rows+'</div>'; }
 
 async function claimBonus(){
   const el=$('claimUtr'), out=$('claimResult');
