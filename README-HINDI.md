@@ -165,3 +165,11 @@ NISHAD BRAND storefront हर 3 सेकंड में `/api/config` से 
 - A reused UTR, wrong UTR, wrong amount, rejected order, or unknown UTR does not release inventory.
 - `MOBILE_APP_TOKEN` must be stored in Render Environment Variables and kept out of source control.
 - SMS is a reconciliation signal; for stronger payment assurance, pair this with a bank/PSP/gateway server-side transaction-status API.
+
+
+## V44.70 — Find ID / Bonus Panel Design
+Find ID पर purple-gradient UTR/RRN panel और Fetch IDs बटन है। Bonus पर अलग warm-gold Bonus Claim Center panel है। मौजूदा `checkUTR()` और `claimBonus()` handlers बरकरार हैं।
+
+
+## V44.71 — Panel Only View
+Find ID या Bonus दबाने पर खरीदने वाले ID package cards छिपते हैं और चुना हुआ panel ही दिखता है। उसी active button को दोबारा दबाने पर store वापस दिखता है।

@@ -230,13 +230,19 @@ document.addEventListener('DOMContentLoaded',()=>{
 function openManageSection(id){
   const target=document.getElementById(id);
   if(!target) return;
+  const alreadyOpen=target.classList.contains('active');
   document.querySelectorAll('.manage-panel').forEach(panel=>{
-    const isTarget=panel===target;
-    panel.classList.toggle('active',isTarget);
-    panel.setAttribute('aria-hidden',String(!isTarget));
+    panel.classList.toggle('active',!alreadyOpen && panel===target);
+    panel.setAttribute('aria-hidden',String(alreadyOpen || panel!==target));
   });
-  document.getElementById('findIdBtn')?.classList.toggle('is-selected',id==='utrCheckSection');
-  document.getElementById('bonusBtn')?.classList.toggle('is-selected',id==='bonusClaimSection');
+  // Show only the requested Find ID / Bonus panel; hide the ID purchase cards.
+  document.body.classList.toggle('manage-view',!alreadyOpen);
+  document.getElementById('findIdBtn')?.classList.toggle('is-selected',!alreadyOpen && id==='utrCheckSection');
+  document.getElementById('bonusBtn')?.classList.toggle('is-selected',!alreadyOpen && id==='bonusClaimSection');
+  if(alreadyOpen){
+    document.getElementById('store')?.scrollIntoView({behavior:'smooth',block:'start'});
+    return;
+  }
   target.scrollIntoView({behavior:'smooth',block:'center'});
   target.classList.remove('panel-replay');
   void target.offsetWidth;

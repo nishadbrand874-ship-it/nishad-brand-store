@@ -828,3 +828,45 @@ body.stock-empty-mode .check{margin-top:10px}
 @keyframes managePanelEnter{from{opacity:0;transform:translateY(18px) scale(.985);filter:blur(3px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
 @media(max-width:600px){.main-actions{gap:6px}.main-actions .manage-btn{min-height:38px;padding:8px 10px!important;font-size:11px!important}.manage-panel.active{gap:10px;padding:14px!important}.manage-panel .section-icon{flex:0 0 36px;width:36px;height:36px}.manage-panel .checkrow{flex-wrap:wrap}.manage-panel .checkrow input{min-width:0;flex:1 1 100%}.manage-panel .checkrow button{width:100%}}
 @media(prefers-reduced-motion:reduce){.manage-panel.active,.manage-panel.panel-replay{animation:none!important}.main-actions .manage-btn{transition:none!important}}
+
+
+/* V44.70 — distinctive Find ID and Bonus Claim panels */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+#utrCheckSection.utr-redesign{
+  box-sizing:border-box;display:none;flex-direction:column;gap:16px;width:min(100% - 24px,920px);
+  margin:28px auto;padding:24px;border:1px solid rgba(196,181,253,.42);border-radius:28px;
+  color:#fff;background:radial-gradient(ellipse at 8% 0%,rgba(168,85,247,.42),transparent 48%),linear-gradient(135deg,#241447 0%,#30206d 52%,#1e245c 100%);
+  box-shadow:0 24px 60px rgba(76,29,149,.25),inset 0 1px 0 rgba(255,255,255,.14);
+}
+#utrCheckSection.utr-redesign.active{display:flex!important}
+.utr-redesign-head{display:flex;align-items:center;justify-content:center;gap:11px;padding:16px 18px;border:1px solid rgba(255,255,255,.15);border-radius:18px;background:linear-gradient(100deg,rgba(109,70,225,.72),rgba(126,49,153,.72));font-size:clamp(17px,2.6vw,23px);font-weight:900;text-align:center}
+.utr-redesign-icon{font-size:23px;color:#e9d5ff}
+.utr-redesign-copy,.bonus-redesign-copy{margin:0;text-align:center;line-height:1.65;font-size:14px;color:rgba(255,255,255,.84)}
+#utrCheckSection .utr-redesign-input,#bonusClaimSection .bonus-redesign-input{box-sizing:border-box;width:100%;min-width:0;min-height:68px;padding:18px 20px;border-radius:18px;font-size:clamp(15px,2.4vw,19px);font-weight:750;text-align:center;outline:none;transition:border-color .2s,box-shadow .2s}
+#utrCheckSection .utr-redesign-input{color:#fff;background:rgba(13,17,55,.88);border:1px solid rgba(196,181,253,.22);box-shadow:inset 0 4px 12px rgba(0,0,0,.2)}
+#utrCheckSection .utr-redesign-input::placeholder{color:rgba(226,218,255,.55)}
+#utrCheckSection .utr-redesign-input:focus{border-color:#c4b5fd;box-shadow:0 0 0 4px rgba(167,139,250,.18)}
+.utr-fetch-button,.bonus-claim-button{display:flex;align-items:center;justify-content:center;gap:13px;width:100%;min-height:68px;padding:16px 20px;border:0;border-radius:18px;font-size:clamp(17px,2.5vw,22px);font-weight:950;cursor:pointer;transition:transform .18s,filter .18s,box-shadow .18s}
+.utr-fetch-button{color:#fff;background:linear-gradient(105deg,#8b35e8 0%,#b04ac5 53%,#f2a66f 100%);box-shadow:0 12px 30px rgba(177,72,199,.3)}
+.utr-fetch-button:hover,.bonus-claim-button:hover{filter:brightness(1.07);transform:translateY(-2px)}
+.utr-fetch-button:active,.bonus-claim-button:active{transform:translateY(0)}
+#utrCheckSection .utr-result{color:#fff;overflow-wrap:anywhere}
+#bonusClaimSection.bonus-redesign{box-sizing:border-box;display:none;flex-direction:column;gap:16px;width:min(100% - 24px,920px);margin:28px auto;padding:24px;border:1px solid rgba(251,191,36,.42);border-radius:28px;color:#fff;background:radial-gradient(ellipse at 100% 0%,rgba(251,146,60,.28),transparent 45%),linear-gradient(140deg,#26172c 0%,#49233b 50%,#5a2c20 100%);box-shadow:0 24px 60px rgba(124,45,18,.2),inset 0 1px 0 rgba(255,255,255,.12)}
+#bonusClaimSection.bonus-redesign.active{display:flex!important}
+.bonus-redesign-top{display:flex;align-items:center;gap:15px;padding:16px 18px;border-radius:18px;background:linear-gradient(105deg,rgba(190,75,46,.55),rgba(173,92,25,.4));border:1px solid rgba(253,186,116,.22)}
+.bonus-redesign-icon{display:grid;place-items:center;flex:0 0 54px;width:54px;height:54px;border-radius:17px;background:linear-gradient(145deg,#fde68a,#fb923c);font-size:29px;box-shadow:0 8px 22px rgba(251,146,60,.22)}
+.bonus-kicker{font-size:10px;letter-spacing:.16em;font-weight:900;color:#fed7aa}
+.bonus-redesign-top h2{margin:3px 0 0;font-size:clamp(20px,3vw,27px);line-height:1.2}
+.bonus-redesign-copy{color:rgba(255,237,213,.88)}
+.bonus-perk{display:flex;align-items:flex-start;gap:12px;padding:16px;border:1px solid rgba(253,186,116,.26);border-radius:17px;background:rgba(255,247,237,.07)}
+.bonus-perk>span{font-size:24px}.bonus-perk strong{display:block;font-size:17px;color:#ffedd5;margin-bottom:5px}.bonus-perk p{margin:0;color:rgba(255,237,213,.82);font-size:13px;line-height:1.55}
+#bonusClaimSection .bonus-redesign-input{color:#fff;background:rgba(39,19,36,.8);border:1px solid rgba(253,186,116,.25)}
+#bonusClaimSection .bonus-redesign-input::placeholder{color:rgba(255,237,213,.5)}
+#bonusClaimSection .bonus-redesign-input:focus{border-color:#fdba74;box-shadow:0 0 0 4px rgba(251,146,60,.15)}
+.bonus-claim-button{color:#402014;background:linear-gradient(105deg,#fde68a,#fb923c 58%,#f97316);box-shadow:0 12px 30px rgba(249,115,22,.2)}
+#bonusClaimSection .bonus-result{color:#fff;overflow-wrap:anywhere}
+@media(max-width:600px){#utrCheckSection.utr-redesign,#bonusClaimSection.bonus-redesign{width:calc(100% - 20px);margin:18px auto;padding:15px;border-radius:22px;gap:13px}.utr-redesign-head,.bonus-redesign-top{padding:13px;border-radius:15px}.utr-fetch-button,.bonus-claim-button{min-height:60px;border-radius:15px}.bonus-redesign-icon{flex-basis:46px;width:46px;height:46px;font-size:25px}#utrCheckSection .utr-redesign-input,#bonusClaimSection .bonus-redesign-input{min-height:60px;padding:14px;font-size:15px}}
+
+/* V44.71: isolate Find ID / Bonus view from the buy packages */
+body.manage-view #store{display:none!important}
+body.manage-view main{min-height:calc(100vh - 150px)}

@@ -24,13 +24,22 @@
     </div>
     <div class="trust-pill">⚡ INSTANT PROCESSING</div>
   </div><div id="packages" class="grid"></div></section>
-<section id="utrCheckSection" class="check manage-panel" aria-label="Find ID / UTR Check">
-  <div class="section-icon">✓</div>
-  <div class="manage-panel-content"><p class="panel-heading">अपना UTR / Transaction ID डालकर purchased ID/status check करें।</p><div class="checkrow"><input id="utr" placeholder="Enter UTR / Transaction ID" maxlength="35" inputmode="text" autocomplete="off"><button onclick="checkUTR()">Check</button></div><div id="result"></div></div>
+<section id="utrCheckSection" class="check manage-panel utr-redesign" aria-label="Find ID / UTR Check" aria-hidden="true">
+  <div class="utr-redesign-head"><span class="utr-redesign-icon" aria-hidden="true">▤</span><span>Find Your Purchased IDs</span></div>
+  <p class="utr-redesign-copy">अपना payment UTR / RRN number डालें और अपनी purchased IDs की जानकारी प्राप्त करें।</p>
+  <label class="sr-only" for="utr">Bank UTR / RRN Number</label>
+  <input id="utr" class="utr-redesign-input" placeholder="Enter UTR / RRN Number Here..." maxlength="35" inputmode="text" autocomplete="off">
+  <button class="utr-fetch-button" type="button" onclick="checkUTR()"><span aria-hidden="true">🚀</span> Fetch IDs <span aria-hidden="true">➜</span></button>
+  <div id="result" class="utr-result" aria-live="polite"></div>
 </section>
-<section id="bonusClaimSection" class="check manage-panel bonus-panel" aria-label="Bonus Claim">
-  <div class="section-icon bonus-section-icon">🎁</div>
-  <div class="claim-box"><h3 id="claimTitle">🎁 10 ID Purchase Bonus</h3><p id="claimDescription">10 ID खरीदने पर उसी UTR से <b>1 extra ID claim</b> करें। Claim केवल <b>1 बार</b> और payment approval के <b>24 घंटे के अंदर</b> होगा।</p><div class="checkrow"><input id="claimUtr" placeholder="Enter the same UTR" maxlength="35" inputmode="text" autocomplete="off"><button onclick="claimBonus()">Claim 1 ID</button></div><div id="claimResult"></div></div>
+<section id="bonusClaimSection" class="check manage-panel bonus-redesign" aria-label="Bonus Claim" aria-hidden="true">
+  <div class="bonus-redesign-top"><span class="bonus-redesign-icon" aria-hidden="true">🎁</span><div><span class="bonus-kicker">NISHAD BRAND REWARDS</span><h2>Bonus Claim Center</h2></div></div>
+  <p class="bonus-redesign-copy">अपना वही payment UTR डालें जिसका bonus claim करना है। नीचे दिए गए बटन से bonus request भेजें।</p>
+  <div class="bonus-perk"><span aria-hidden="true">✨</span><div><strong id="claimTitle">10 ID Purchase Bonus</strong><p id="claimDescription">10 ID खरीदने पर उसी UTR से <b>1 extra ID claim</b> करें। Claim केवल <b>1 बार</b> और payment approval के <b>24 घंटे के अंदर</b> होगा।</p></div></div>
+  <label class="sr-only" for="claimUtr">Payment UTR</label>
+  <input id="claimUtr" class="bonus-redesign-input" placeholder="Enter the same payment UTR..." maxlength="35" inputmode="text" autocomplete="off">
+  <button class="bonus-claim-button" type="button" onclick="claimBonus()">🎉 Claim My Bonus <span aria-hidden="true">➜</span></button>
+  <div id="claimResult" class="bonus-result" aria-live="polite"></div>
 </section>
 </main>
 <a id="wa" class="whatsapp" target="_blank" rel="noopener" aria-label="WhatsApp support"><span>◉</span><small>Help</small></a>
