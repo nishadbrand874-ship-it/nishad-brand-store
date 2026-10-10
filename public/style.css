@@ -998,3 +998,53 @@ body.manage-view #utrCheckSection .utr-fetch-button span:last-child{display:inli
 @keyframes fetchArrowNudge{0%,100%{transform:translateX(0)}50%{transform:translateX(4px)}}
 @media(prefers-reduced-motion:reduce){body.manage-view #utrCheckSection .utr-fetch-button,body.manage-view #utrCheckSection .utr-fetch-button::before,body.manage-view #utrCheckSection .utr-fetch-button span{animation:none!important}}
 @media(max-width:600px){body.manage-view #utrCheckSection .utr-redesign-head{padding:13px 12px;font-size:16px;gap:8px}}
+
+
+/* V44.72 — Match the Find ID and Bonus navigation buttons to the blue-teal reference */
+.header-actions.main-actions .manage-btn.find-id-btn,
+.header-actions.main-actions .manage-btn.bonus-btn {
+  color: #fff !important;
+  background: linear-gradient(105deg, #2057d6 0%, #087fae 58%, #0799b4 100%) !important;
+  border: 0 !important;
+  box-shadow: 0 7px 18px rgba(8, 127, 174, .24);
+  transition: transform .2s ease, filter .2s ease, box-shadow .2s ease;
+}
+.header-actions.main-actions .manage-btn.find-id-btn:hover,
+.header-actions.main-actions .manage-btn.bonus-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(8, 127, 174, .32);
+}
+.header-actions.main-actions .manage-btn.find-id-btn:active,
+.header-actions.main-actions .manage-btn.bonus-btn:active {
+  transform: translateY(0) scale(.98);
+}
+
+
+/* V44.73 — Purple Find ID Fetch button to match the NISHAD BRAND panel */
+.utr-fetch-button {
+  color: #fff !important;
+  background: linear-gradient(105deg, #6d28d9 0%, #7c3aed 48%, #a855f7 100%) !important;
+  box-shadow: 0 12px 30px rgba(124, 58, 237, .32), inset 0 1px 0 rgba(255,255,255,.18) !important;
+  border: 1px solid rgba(221, 214, 254, .2) !important;
+}
+.utr-fetch-button:hover {
+  filter: brightness(1.1) saturate(1.08) !important;
+  box-shadow: 0 15px 34px rgba(124, 58, 237, .4), inset 0 1px 0 rgba(255,255,255,.22) !important;
+}
+
+
+/* V44.74 — Change the whole Find ID and Bonus panel background (not the button) */
+#utrCheckSection.utr-redesign,
+#bonusClaimSection.bonus-redesign {
+  background:
+    radial-gradient(ellipse at 8% 0%, rgba(59,130,246,.28), transparent 48%),
+    linear-gradient(115deg, #2057d6 0%, #126bbd 48%, #0799b4 100%) !important;
+  border: 1px solid rgba(191, 233, 255, .42) !important;
+  box-shadow: 0 24px 60px rgba(8, 127, 174, .24), inset 0 1px 0 rgba(255,255,255,.16) !important;
+}
+.utr-redesign-head,
+.bonus-redesign-top {
+  background: linear-gradient(105deg, rgba(30,64,175,.62), rgba(8,145,178,.55)) !important;
+  border-color: rgba(219, 244, 255, .24) !important;
+}
