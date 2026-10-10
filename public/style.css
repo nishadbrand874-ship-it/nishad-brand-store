@@ -1048,3 +1048,61 @@ body.manage-view #utrCheckSection .utr-fetch-button span:last-child{display:inli
   background: linear-gradient(105deg, rgba(30,64,175,.62), rgba(8,145,178,.55)) !important;
   border-color: rgba(219, 244, 255, .24) !important;
 }
+
+
+/* V44.75 — Compact Find ID and Bonus panels */
+#utrCheckSection.utr-redesign,
+#bonusClaimSection.bonus-redesign {
+  width: min(100% - 32px, 760px) !important;
+  margin: 18px auto !important;
+  padding: 18px !important;
+  gap: 12px !important;
+  border-radius: 22px !important;
+}
+.utr-redesign-head,
+.bonus-redesign-top {
+  padding: 12px 15px !important;
+  border-radius: 14px !important;
+}
+.utr-redesign-head { font-size: clamp(15px, 2vw, 19px) !important; }
+.utr-redesign-icon { font-size: 19px !important; }
+#utrCheckSection .utr-redesign-input,
+#bonusClaimSection .bonus-redesign-input {
+  min-height: 54px !important;
+  padding: 12px 16px !important;
+  border-radius: 14px !important;
+  font-size: clamp(14px, 1.8vw, 16px) !important;
+}
+.utr-fetch-button,
+.bonus-claim-button {
+  min-height: 56px !important;
+  padding: 12px 16px !important;
+  border-radius: 14px !important;
+  font-size: clamp(15px, 2vw, 18px) !important;
+}
+#utrCheckSection .utr-result,
+#bonusClaimSection .bonus-result {
+  font-size: 14px !important;
+  border-radius: 14px !important;
+}
+.bonus-redesign-icon {
+  flex-basis: 44px !important;
+  width: 44px !important;
+  height: 44px !important;
+  font-size: 23px !important;
+}
+.bonus-redesign-top h2 { font-size: clamp(18px, 2.4vw, 22px) !important; }
+@media(max-width:600px) {
+  #utrCheckSection.utr-redesign,
+  #bonusClaimSection.bonus-redesign {
+    width: calc(100% - 24px) !important;
+    margin: 14px auto !important;
+    padding: 13px !important;
+    gap: 10px !important;
+    border-radius: 18px !important;
+  }
+  .utr-redesign-head,.bonus-redesign-top { padding: 10px 12px !important; }
+  #utrCheckSection .utr-redesign-input,
+  #bonusClaimSection .bonus-redesign-input { min-height: 50px !important; }
+  .utr-fetch-button,.bonus-claim-button { min-height: 52px !important; }
+}
