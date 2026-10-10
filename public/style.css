@@ -958,3 +958,43 @@ body.manage-view #bonusBtn.is-selected{box-shadow:0 0 0 2px rgba(255,255,255,.55
   body.manage-view #utrCheckSection.utr-redesign,
   body.manage-view #bonusClaimSection.bonus-redesign{margin:18px auto}
 }
+
+
+/* V44.71 — UTR title + animated Fetch IDs button */
+body.manage-view #utrCheckSection .utr-redesign-head{
+  justify-content:center;
+  min-height:58px;
+  padding:15px 18px;
+  color:#fff;
+  background:linear-gradient(105deg,#6440bd 0%,#78318d 100%);
+  border:1px solid rgba(222,204,255,.22);
+  border-radius:18px;
+  font-size:clamp(17px,2.3vw,23px);
+  line-height:1.35;
+  text-align:center;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
+}
+body.manage-view #utrCheckSection .utr-redesign-icon{color:#e7d5ff;flex:0 0 auto}
+body.manage-view #utrCheckSection .utr-fetch-button{
+  position:relative;isolation:isolate;overflow:hidden;
+  background:linear-gradient(105deg,#9632ed 0%,#b94db8 54%,#f5a46e 100%);
+  background-size:180% 100%;
+  animation:fetchGradientFlow 4s ease-in-out infinite,fetchSoftPulse 2.4s ease-in-out infinite;
+  transition:transform .22s ease,filter .22s ease;
+}
+body.manage-view #utrCheckSection .utr-fetch-button::before{
+  content:"";position:absolute;z-index:-1;top:-60%;left:-45%;width:32%;height:220%;
+  transform:rotate(22deg);background:linear-gradient(90deg,transparent,rgba(255,255,255,.36),transparent);
+  animation:fetchShine 3.2s ease-in-out infinite;pointer-events:none;
+}
+body.manage-view #utrCheckSection .utr-fetch-button:hover{transform:translateY(-2px) scale(1.005);filter:brightness(1.08)}
+body.manage-view #utrCheckSection .utr-fetch-button:active{transform:scale(.99)}
+body.manage-view #utrCheckSection .utr-fetch-button span:first-child{display:inline-block;animation:fetchRocketBob 1.8s ease-in-out infinite}
+body.manage-view #utrCheckSection .utr-fetch-button span:last-child{display:inline-block;animation:fetchArrowNudge 1.2s ease-in-out infinite}
+@keyframes fetchGradientFlow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes fetchSoftPulse{0%,100%{box-shadow:0 12px 28px rgba(151,65,210,.23)}50%{box-shadow:0 15px 34px rgba(151,65,210,.4),0 0 0 3px rgba(190,140,255,.1)}}
+@keyframes fetchShine{0%,35%{left:-45%}75%,100%{left:125%}}
+@keyframes fetchRocketBob{0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-3px) rotate(5deg)}}
+@keyframes fetchArrowNudge{0%,100%{transform:translateX(0)}50%{transform:translateX(4px)}}
+@media(prefers-reduced-motion:reduce){body.manage-view #utrCheckSection .utr-fetch-button,body.manage-view #utrCheckSection .utr-fetch-button::before,body.manage-view #utrCheckSection .utr-fetch-button span{animation:none!important}}
+@media(max-width:600px){body.manage-view #utrCheckSection .utr-redesign-head{padding:13px 12px;font-size:16px;gap:8px}}

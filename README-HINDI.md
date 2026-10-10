@@ -177,3 +177,7 @@ Find ID या Bonus दबाने पर खरीदने वाले ID p
 
 ## V44.72 — Matched Panel Colours
 Find ID और Bonus panels अब साइट की purple-indigo shell, sky-blue page background, dark navy inputs, gradient action buttons और mint-green verified result card वाली रंग योजना साझा करते हैं।
+
+
+## V44.71 — UTR Panel Polish
+Find ID panel heading is now “Enter your Bank UTR / RRN Number”; the extra heading and explanatory subtitle were removed. Fetch IDs has gradient shimmer, gentle pulse, and icon motion animations.
