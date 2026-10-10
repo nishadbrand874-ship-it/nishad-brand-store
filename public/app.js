@@ -226,23 +226,21 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 
 
-// V44.61: top-corner Manage menu
-function toggleManageMenu(){
-  const m=document.getElementById('manageMenu'), b=document.getElementById('manageBtn');
-  if(!m) return;
-  const hidden=m.classList.toggle('hidden');
-  if(b) b.setAttribute('aria-expanded',String(!hidden));
-}
+// V44.69: animated Find ID and Bonus panels
 function openManageSection(id){
-  const el=document.getElementById(id);
-  const m=document.getElementById('manageMenu'), b=document.getElementById('manageBtn');
-  if(m) m.classList.add('hidden');
-  if(b) b.setAttribute('aria-expanded','false');
-  if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+  const target=document.getElementById(id);
+  if(!target) return;
+  document.querySelectorAll('.manage-panel').forEach(panel=>{
+    const isTarget=panel===target;
+    panel.classList.toggle('active',isTarget);
+    panel.setAttribute('aria-hidden',String(!isTarget));
+  });
+  document.getElementById('findIdBtn')?.classList.toggle('is-selected',id==='utrCheckSection');
+  document.getElementById('bonusBtn')?.classList.toggle('is-selected',id==='bonusClaimSection');
+  target.scrollIntoView({behavior:'smooth',block:'center'});
+  target.classList.remove('panel-replay');
+  void target.offsetWidth;
+  target.classList.add('panel-replay');
+  const input=target.querySelector('input');
+  window.setTimeout(()=>input?.focus({preventScroll:true}),260);
 }
-document.addEventListener('click',function(e){
-  const a=document.querySelector('.header-actions');
-  const m=document.getElementById('manageMenu');
-  const b=document.getElementById('manageBtn');
-  if(a && m && !a.contains(e.target)){m.classList.add('hidden');if(b)b.setAttribute('aria-expanded','false');}
-});

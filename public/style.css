@@ -806,3 +806,25 @@ body.stock-empty-mode .check{margin-top:10px}
 .payment-spinner{display:inline-block;flex:0 0 28px;width:28px;height:28px;border:4px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:paymentSpin .8s linear infinite}
 @keyframes paymentSpin{to{transform:rotate(360deg)}}
 @media(max-width:600px){.payment-processing{margin:7px 9px;padding:11px 12px;gap:9px}.payment-processing b{font-size:13px}.payment-processing small{font-size:10px}.payment-spinner{flex-basis:24px;width:24px;height:24px;border-width:3px}}
+
+
+/* V44.69 — Find ID + Bonus quick actions and animated panels */
+.main-actions{display:flex;align-items:center;gap:9px}
+.main-actions .manage-btn{min-height:42px;padding:10px 17px!important;font-size:13px!important;border-radius:14px!important;transition:transform .22s ease,box-shadow .22s ease,filter .22s ease}
+.find-id-btn{background:linear-gradient(120deg,#4f46e5,#2563eb,#7c3aed)!important;border:1px solid rgba(199,210,254,.6)!important;box-shadow:0 9px 24px rgba(79,70,229,.32)!important}
+.bonus-btn{background:linear-gradient(120deg,#f59e0b,#f97316,#ef4444)!important;border:1px solid rgba(254,215,170,.7)!important;box-shadow:0 9px 24px rgba(249,115,22,.28)!important}
+.main-actions .manage-btn:hover,.main-actions .manage-btn.is-selected{transform:translateY(-2px) scale(1.025);filter:brightness(1.1);box-shadow:0 13px 30px rgba(59,130,246,.34)!important}
+.bonus-btn.is-selected{box-shadow:0 13px 30px rgba(249,115,22,.38)!important}
+.manage-panel{display:none!important;scroll-margin-top:110px}
+.manage-panel.active{display:flex!important;animation:managePanelEnter .48s cubic-bezier(.2,.8,.2,1) both}
+.manage-panel.panel-replay{animation:managePanelEnter .48s cubic-bezier(.2,.8,.2,1) both}
+.manage-panel-content{min-width:0;flex:1}
+.panel-heading{margin-top:0!important;font-weight:650}
+.bonus-panel{border:1px solid rgba(251,146,60,.28)!important;background:linear-gradient(120deg,rgba(255,255,255,.96),rgba(255,247,237,.98))!important;box-shadow:0 18px 50px rgba(234,88,12,.12)!important}
+.bonus-section-icon{background:linear-gradient(145deg,#fff7ed,#fed7aa)!important;color:#c2410c!important;box-shadow:0 8px 22px rgba(249,115,22,.17)}
+.bonus-panel .claim-box{border:1px solid rgba(251,146,60,.34)!important;background:linear-gradient(135deg,rgba(255,247,237,.96),rgba(255,255,255,.98))!important;box-shadow:inset 0 1px 0 #fff,0 10px 25px rgba(234,88,12,.07)!important}
+.bonus-panel .claim-box h3{color:#9a3412!important}
+.bonus-panel .claim-box .checkrow button{background:linear-gradient(120deg,#f59e0b,#f97316,#ef4444)!important;box-shadow:0 8px 20px rgba(249,115,22,.24)!important}
+@keyframes managePanelEnter{from{opacity:0;transform:translateY(18px) scale(.985);filter:blur(3px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
+@media(max-width:600px){.main-actions{gap:6px}.main-actions .manage-btn{min-height:38px;padding:8px 10px!important;font-size:11px!important}.manage-panel.active{gap:10px;padding:14px!important}.manage-panel .section-icon{flex:0 0 36px;width:36px;height:36px}.manage-panel .checkrow{flex-wrap:wrap}.manage-panel .checkrow input{min-width:0;flex:1 1 100%}.manage-panel .checkrow button{width:100%}}
+@media(prefers-reduced-motion:reduce){.manage-panel.active,.manage-panel.panel-replay{animation:none!important}.main-actions .manage-btn{transition:none!important}}
