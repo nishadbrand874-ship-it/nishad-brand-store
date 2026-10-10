@@ -870,3 +870,91 @@ body.stock-empty-mode .check{margin-top:10px}
 /* V44.71: isolate Find ID / Bonus view from the buy packages */
 body.manage-view #store{display:none!important}
 body.manage-view main{min-height:calc(100vh - 150px)}
+
+
+/* V44.72 — match Find ID and Bonus panels to the site's purple / sky / mint palette */
+body.manage-view{
+  min-height:100vh;
+  background:linear-gradient(145deg,#c9f0f7 0%,#d8e5ff 42%,#f0e8ff 100%)!important;
+  color:#fff;
+}
+body.manage-view main{background:transparent!important}
+body.manage-view #utrCheckSection.utr-redesign,
+body.manage-view #bonusClaimSection.bonus-redesign{
+  color:#fff;
+  border:1px solid rgba(154,126,255,.55);
+  background:linear-gradient(125deg,#542b85 0%,#34216f 46%,#20265e 100%);
+  box-shadow:0 24px 55px rgba(45,37,100,.22),inset 0 1px 0 rgba(255,255,255,.14);
+}
+body.manage-view .utr-redesign-head,
+body.manage-view .bonus-redesign-top{
+  color:#fff;
+  border:1px solid rgba(255,255,255,.16);
+  background:linear-gradient(105deg,#6740c5 0%,#74318e 100%);
+}
+body.manage-view .utr-redesign-copy,
+body.manage-view .bonus-redesign-copy{color:#7cae9f}
+body.manage-view #utrCheckSection .utr-redesign-input,
+body.manage-view #bonusClaimSection .bonus-redesign-input{
+  color:#fff;
+  background:#15153f;
+  border:1px solid rgba(199,190,255,.18);
+  box-shadow:inset 0 4px 12px rgba(0,0,0,.12);
+}
+body.manage-view #utrCheckSection .utr-redesign-input::placeholder,
+body.manage-view #bonusClaimSection .bonus-redesign-input::placeholder{color:#77789c}
+body.manage-view #utrCheckSection .utr-redesign-input:focus,
+body.manage-view #bonusClaimSection .bonus-redesign-input:focus{
+  border-color:#b6a0ff;box-shadow:0 0 0 4px rgba(171,139,255,.18)
+}
+body.manage-view .utr-fetch-button,
+body.manage-view .bonus-claim-button{
+  color:#fff;
+  background:linear-gradient(105deg,#9632ed 0%,#b94db8 54%,#f5a46e 100%);
+  box-shadow:0 12px 28px rgba(151,65,210,.23);
+}
+body.manage-view .bonus-claim-button{color:#fff}
+body.manage-view .bonus-perk{
+  border:1px solid rgba(255,255,255,.25);
+  background:linear-gradient(120deg,#5c3aa5,#45317f);
+}
+body.manage-view .bonus-perk strong{color:#fff}
+body.manage-view .bonus-perk p{color:#c8c7e9}
+body.manage-view #utrCheckSection .success,
+body.manage-view #bonusClaimSection .success{
+  color:#086448;
+  background:#eafcf3;
+  border:1px solid #b5f0d1;
+  border-radius:15px;
+  padding:18px;
+}
+body.manage-view #utrCheckSection .success code,
+body.manage-view #bonusClaimSection .success code{color:#147456}
+body.manage-view #utrCheckSection .pending,
+body.manage-view #bonusClaimSection .pending{
+  color:#5b4500;background:#fff7d6;border:1px solid #f3d87a;border-radius:14px;padding:16px
+}
+body.manage-view #utrCheckSection .error,
+body.manage-view #bonusClaimSection .error{
+  color:#8c2638;background:#fff0f1;border:1px solid #ffc8ce;border-radius:14px;padding:14px
+}
+body.manage-view #utrCheckSection .idrow,
+body.manage-view #bonusClaimSection .idrow{
+  border-color:rgba(8,100,72,.12);
+}
+body.manage-view #utrCheckSection .cred-line code,
+body.manage-view #bonusClaimSection .cred-line code{
+  background:#dcefe6;color:#14684f;border-radius:9px
+}
+body.manage-view #utrCheckSection .copy-all-wrap button,
+body.manage-view #bonusClaimSection .copy-all-wrap button,
+body.manage-view #utrCheckSection .idrow button,
+body.manage-view #bonusClaimSection .idrow button{
+  border:1px solid #a8d8ff;background:#f2fbff;color:#17436d;border-radius:12px
+}
+body.manage-view #findIdBtn.is-selected,
+body.manage-view #bonusBtn.is-selected{box-shadow:0 0 0 2px rgba(255,255,255,.55),0 7px 20px rgba(85,51,150,.25)}
+@media(max-width:600px){
+  body.manage-view #utrCheckSection.utr-redesign,
+  body.manage-view #bonusClaimSection.bonus-redesign{margin:18px auto}
+}

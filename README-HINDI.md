@@ -173,3 +173,7 @@ Find ID पर purple-gradient UTR/RRN panel और Fetch IDs बटन है�
 
 ## V44.71 — Panel Only View
 Find ID या Bonus दबाने पर खरीदने वाले ID package cards छिपते हैं और चुना हुआ panel ही दिखता है। उसी active button को दोबारा दबाने पर store वापस दिखता है।
+
+
+## V44.72 — Matched Panel Colours
+Find ID और Bonus panels अब साइट की purple-indigo shell, sky-blue page background, dark navy inputs, gradient action buttons और mint-green verified result card वाली रंग योजना साझा करते हैं।
