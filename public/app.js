@@ -214,7 +214,14 @@ async function claimBonus(){
   }catch(e){out.innerHTML='<div class="error">'+esc(e.message)+'</div>';}
 }
 async function checkUTR(){const u=$('utr').value.trim();if(!/^[A-Za-z0-9]{8,35}$/.test(u)){$('result').innerHTML='<div class="error">Valid UTR / Transaction ID डालें (8–35 letters/digits).</div>';return;}$('result').textContent='Checking…';try{const r=await fetch('/api/order-check/'+encodeURIComponent(u));const d=await r.json();if(!d.found){$('result').innerHTML='<div class="error">Not Found — इस UTR/Payment ID से कोई verified purchase नहीं मिला।</div>';return;}showCheck(d.items,d.order);}catch(e){$('result').innerHTML='<div class="error">'+esc(e.message)+'</div>';}}
-function showCheck(items,order){if(order.status==='rejected'){ $('result').innerHTML='<div class="error">Your UTR / Transaction ID was rejected.</div>';return;} if(order.status!=='approved'&&order.status!=='paid'){ $('result').innerHTML='<div class="pending"><b>Payment Pending Approval</b><br>Payment record mil gaya hai, lekin admin approval abhi pending hai.<br>Order: <code>'+esc(order.order_id)+'</code></div>';return;} const rows=credentialRows(items,'ID ');$('result').innerHTML='<div class="success"><b>Verified Purchase</b><br>Order: <code>'+esc(order.order_id)+'</code><div class="copy-all-wrap">'+copyAllButton(items,'📋 Copy All IDs & Passwords')+'</div>'+rows+'</div>'; }
+function downloadAllCredentials(items){
+  const list=Array.isArray(items)?items:[];
+  const text=list.map((x,i)=>'ID '+(i+1)+': '+String(x.login_id??'')+(x.login_password?'\nPassword: '+String(x.login_password):'')+(x.extra_data?'\n'+String(x.extra_data):'')).join('\n\n');
+  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download='NISHAD-BRAND-Credentials.txt';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+}
+function showCheck(items,order){if(order.status==='rejected'){ $('result').innerHTML='<div class="error">Your UTR / Transaction ID was rejected.</div>';return;} if(order.status!=='approved'&&order.status!=='paid'){ $('result').innerHTML='<div class="pending"><b>Payment Pending Approval</b><br>Payment record mil gaya hai, lekin admin approval abhi pending hai.<br>Order: <code>'+esc(order.order_id)+'</code></div>';return;} const rows=credentialRows(items,'ID ');$('result').innerHTML='<div class="success find-credentials-result"><b class="find-credentials-title">Verified Purchase</b><div class="credentials-terminal">'+rows+'</div><div class="credentials-actions">'+copyAllButton(items,'▣ Copy All Credentials')+'<button type="button" class="download-credentials" onclick="downloadAllCredentials('+JSON.stringify(items||[]).replace(/</g,'\\u003c').replace(/>/g,'\\u003e')+')">⇩ Download as TXT</button></div></div>'; }
 
 
 // Start the site-wide Cloudflare gate as soon as the page DOM is ready.
