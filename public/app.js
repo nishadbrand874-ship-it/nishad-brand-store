@@ -157,19 +157,17 @@ async function checkQrStatus(orderId){
     if(!r.ok) throw new Error(d.error||'Verification failed');
      if(d.status==='approved' || d.status==='paid'){
        stopPolling();
-       $('utrMsg').innerHTML='<div class="success"><b>✅ Payment Success</b></div>';
-       let items=Array.isArray(d.items)?d.items:[];
-       // Some deployments can return approval before the credential payload is
-       // attached. Fetch the approved order once more by the submitted UTR so
-       // the released ID/password is always rendered below Payment Success.
-       if(!items.length && window.lastSubmittedUtr){
-         try{
-           const rr=await fetch('/api/order-check/'+encodeURIComponent(window.lastSubmittedUtr),{cache:'no-store'});
-           const rd=await rr.json();
-           if(Array.isArray(rd.items)) items=rd.items;
-         }catch(e){console.warn('Credential fallback fetch:',e);}
+       // After verified approval, send the customer to Find ID. They can
+       // submit the same UTR there to retrieve only their approved purchase.
+       const approvedUtr=String(window.lastSubmittedUtr||'').trim();
+       closePay();
+       openManageSection('utrCheckSection');
+       if(approvedUtr){
+         $('utr').value=approvedUtr;
+         $('result').innerHTML='<div class="success"><b>✅ Payment Approved</b><br>अब Find ID बटन दबाएँ। आपकी खरीदी हुई ID और Password नीचे दिखाई देंगे।</div>';
+       } else {
+         $('result').innerHTML='<div class="success"><b>✅ Payment Approved</b><br>अपना UTR डालकर Fetch IDs दबाएँ।</div>';
        }
-       showIDs(items,d.order);
        return;
      }
      if(d.status==='pending_approval'){ $('payStatus').innerHTML='<div class="payment-processing"><span class="payment-spinner" aria-hidden="true"></span><div><b>Payment Processing...</b><br><small>Please wait...</small></div></div>'; $('utrMsg').innerHTML='<div class="payment-processing"><span class="payment-spinner" aria-hidden="true"></span><div><b>Payment Processing...</b><br><small>Payment verify ho raha hai. Please wait.</small></div></div>'; return; }

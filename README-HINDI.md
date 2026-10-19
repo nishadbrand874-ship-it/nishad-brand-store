@@ -181,3 +181,9 @@ Find ID और Bonus panels अब साइट की purple-indigo shell, sky-
 
 ## V44.71 — UTR Panel Polish
 Find ID panel heading is now “Enter your Bank UTR / RRN Number”; the extra heading and explanatory subtitle were removed. Fetch IDs has gradient shimmer, gentle pulse, and icon motion animations.
+
+
+## Find ID Redirect Update
+- UTR submit करने के बाद payment verified और approved होते ही customer सीधे Find ID panel पर जाएगा.
+- Submitted UTR Find ID input में भर दिया जाएगा; customer Fetch IDs दबाकर उसी approved purchase की ID/password देख सकता है.
+- Find ID API केवल approved/paid order की credentials लौटाती है; pending/rejected order पर credentials नहीं मिलते.
