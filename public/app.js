@@ -179,7 +179,7 @@ function stopPolling(){if(pollTimer)clearInterval(pollTimer);pollTimer=null;if(c
 function copyCredential(value,btn){const text=String(value??'');if(!text)return;const done=()=>{if(btn){const old=btn.textContent;btn.textContent='✓ Copied';btn.classList.add('copied');setTimeout(()=>{btn.textContent=old;btn.classList.remove('copied');},1400);}};if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));}else{fallbackCopy(text,done);}}
 function fallbackCopy(text,done){const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done();}finally{ta.remove();}}
 function copyButton(value,label){const safe=JSON.stringify(String(value??'')).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');return '<button type="button" class="copy-cred" onclick="copyCredential('+safe+',this)">'+label+'</button>';}
-function copyAllCredentials(items,btn){const list=(items||[]);if(!list.length)return;const text=list.map((x,i)=>{const parts=['ID '+(i+1)+': '+String(x.login_id??'')];if(x.login_password)parts.push('Password: '+String(x.login_password));if(x.extra_data)parts.push(String(x.extra_data));return parts.join('\n');}).join('\n\n');copyCredential(text,btn);}
+function copyAllCredentials(items,btn){const list=(items||[]);if(!list.length)return;const text=list.map(x=>{const login=String(x.login_id??'');const password=String(x.login_password??'');const pair=password?login+':'+password:login;return x.extra_data?pair+'\n'+String(x.extra_data):pair;}).join('\n');copyCredential(text,btn);}
 function copyAllButton(items,label='📋 Copy All'){const encoded=JSON.stringify(items||[]).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');return '<button type="button" class="copy-all-cred" onclick="copyAllCredentials('+encoded+',this)">'+label+'</button>';}
 function credentialRows(items,prefix){return (items||[]).map((x,i)=>'<div class="idrow"><div class="cred-line"><b>'+prefix+(i+1)+':</b> <code>'+esc(x.login_id)+'</code>'+copyButton(x.login_id,'📋 Copy ID')+'</div>'+(x.login_password?'<div class="cred-line"><b>Password:</b> <code>'+esc(x.login_password)+'</code>'+copyButton(x.login_password,'📋 Copy Password')+'</div>':'')+(x.extra_data?'<div class="cred-extra">'+esc(x.extra_data)+'</div>':'')+'</div>').join('');}
 function showIDs(items,order){
@@ -216,10 +216,21 @@ async function claimBonus(){
 async function checkUTR(){const u=$('utr').value.trim();if(!/^[A-Za-z0-9]{8,35}$/.test(u)){$('result').innerHTML='<div class="error">Valid UTR / Transaction ID डालें (8–35 letters/digits).</div>';return;}$('result').textContent='Checking…';try{const r=await fetch('/api/order-check/'+encodeURIComponent(u));const d=await r.json();if(!d.found){$('result').innerHTML='<div class="error">Not Found — इस UTR/Payment ID से कोई verified purchase नहीं मिला।</div>';return;}showCheck(d.items,d.order);}catch(e){$('result').innerHTML='<div class="error">'+esc(e.message)+'</div>';}}
 function downloadAllCredentials(items){
   const list=Array.isArray(items)?items:[];
-  const text=list.map((x,i)=>'ID '+(i+1)+': '+String(x.login_id??'')+(x.login_password?'\nPassword: '+String(x.login_password):'')+(x.extra_data?'\n'+String(x.extra_data):'')).join('\n\n');
+  if(!list.length)return;
+  // Format each credential exactly as login:password, one credential per line.
+  const text=list.map(x=>{
+    const login=String(x.login_id??'');
+    const password=String(x.login_password??'');
+    const pair=password?login+':'+password:login;
+    return x.extra_data?pair+'\n'+String(x.extra_data):pair;
+  }).join('\n');
   const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');
-  a.href=url;a.download='NISHAD-BRAND-Credentials.txt';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='NISHAD-BRAND-Credentials.txt';a.style.display='none';
+  document.body.appendChild(a);a.click();a.remove();
+  // Keep the blob URL alive briefly so the browser can start downloading it.
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function compactCredentialRows(items){return (items||[]).map((x)=>{const pair=String(x.login_id??'')+(x.login_password?':'+String(x.login_password):'');return '<div class="idrow"><div class="cred-line"><code>'+esc(pair)+'</code>'+copyButton(pair,'📋 Copy')+'</div>'+(x.extra_data?'<div class="cred-extra">'+esc(x.extra_data)+'</div>':'')+'</div>';}).join('');}
 function showCheck(items,order){if(order.status==='rejected'){ $('result').innerHTML='<div class="error">Your UTR / Transaction ID was rejected.</div>';return;} if(order.status!=='approved'&&order.status!=='paid'){ $('result').innerHTML='<div class="pending"><b>Payment Pending Approval</b><br>Payment record mil gaya hai, lekin admin approval abhi pending hai.<br>Order: <code>'+esc(order.order_id)+'</code></div>';return;} const rows=compactCredentialRows(items);$('result').innerHTML='<div class="success find-credentials-result"><b class="find-credentials-title">Verified Purchase</b><div class="credentials-terminal">'+rows+'</div><div class="credentials-actions">'+copyAllButton(items,'▣ Copy All Credentials')+'<button type="button" class="download-credentials" onclick="downloadAllCredentials('+JSON.stringify(items||[]).replace(/</g,'\\u003c').replace(/>/g,'\\u003e')+')">⇩ Download as TXT</button></div></div>'; }
