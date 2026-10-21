@@ -164,7 +164,7 @@ async function checkQrStatus(orderId){
        openManageSection('utrCheckSection');
        if(approvedUtr){
          $('utr').value=approvedUtr;
-         $('result').innerHTML='<div class="success"><b>✅ Payment Approved</b><br>अब Find ID बटन दबाएँ। आपकी खरीदी हुई ID और Password नीचे दिखाई देंगे।</div>';
+         $('result').innerHTML='<div class="success"><b>✅ Payment Approved</b><br>आपकी ID लोड हो रही है…</div>'; await checkUTR();
        } else {
          $('result').innerHTML='<div class="success"><b>✅ Payment Approved</b><br>अपना UTR डालकर Fetch IDs दबाएँ।</div>';
        }
