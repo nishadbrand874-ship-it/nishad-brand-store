@@ -489,7 +489,7 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*10
       return res.status(422).json({code:'INVALID_UTR_AMOUNT',error:'INVALID UTR / AMOUNT: ऐप में मिली पेमेंट राशि ऑर्डर की राशि से मेल नहीं खाती। ऑर्डर Reject नहीं हुआ है। सही UTR और सही पेमेंट की पुष्टि करके फिर कोशिश करें।'});
     }
     if(appMatch.matched_order_id && String(appMatch.matched_order_id)!==orderId && appMatch.match_status==='matched'){
-      return res.status(409).json({code:'UTR_ALREADY_USED',error:'यह UTR पहले ही दूसरे ऑर्डर से match हो चुका है। सही UTR डालकर फिर कोशिश करें।'});
+      return res.status(409).json({code:'UTR_ALREADY_USED',error:'UTR ALREADY SUBMITTED — यह UTR पहले ही सबमिट हो चुका है। कृपया सही और नया UTR डालें।'});
     }
 
     // Atomically lock and reserve enough stock while recording the UTR.

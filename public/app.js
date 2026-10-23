@@ -172,7 +172,9 @@ async function checkQrStatus(orderId){
        // submit the same UTR there to retrieve only their approved purchase.
        const approvedUtr=String(window.lastSubmittedUtr||'').trim();
        closePay();
-       openManageSection('utrCheckSection');
+       // Force-open Find ID after approval. The normal menu toggle closes an
+       // already-open panel, which could send the customer back to the home view.
+       openManageSection('utrCheckSection', true);
        if(approvedUtr){
          $('utr').value=approvedUtr;
          $('result').innerHTML='<div class="success"><b>✅ Payment Approved</b><br>आपकी ID लोड हो रही है…</div>'; await checkUTR();
@@ -255,19 +257,22 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 
 // V44.69: animated Find ID and Bonus panels
-function openManageSection(id){
+function openManageSection(id, forceOpen=false){
   const target=document.getElementById(id);
   if(!target) return;
   const alreadyOpen=target.classList.contains('active');
+  // A normal menu click toggles the panel; automatic post-payment navigation
+  // must force it open even if Find ID was already active.
+  const shouldOpen=forceOpen || !alreadyOpen;
   document.querySelectorAll('.manage-panel').forEach(panel=>{
-    panel.classList.toggle('active',!alreadyOpen && panel===target);
-    panel.setAttribute('aria-hidden',String(alreadyOpen || panel!==target));
+    panel.classList.toggle('active',shouldOpen && panel===target);
+    panel.setAttribute('aria-hidden',String(!shouldOpen || panel!==target));
   });
   // Show only the requested Find ID / Bonus panel; hide the ID purchase cards.
-  document.body.classList.toggle('manage-view',!alreadyOpen);
-  document.getElementById('findIdBtn')?.classList.toggle('is-selected',!alreadyOpen && id==='utrCheckSection');
-  document.getElementById('bonusBtn')?.classList.toggle('is-selected',!alreadyOpen && id==='bonusClaimSection');
-  if(alreadyOpen){
+  document.body.classList.toggle('manage-view',shouldOpen);
+  document.getElementById('findIdBtn')?.classList.toggle('is-selected',shouldOpen && id==='utrCheckSection');
+  document.getElementById('bonusBtn')?.classList.toggle('is-selected',shouldOpen && id==='bonusClaimSection');
+  if(!shouldOpen){
     document.getElementById('store')?.scrollIntoView({behavior:'smooth',block:'start'});
     return;
   }
