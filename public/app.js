@@ -149,7 +149,18 @@ async function submitUTR(){
     $('utrBtn').disabled=true;
     resetTurnstile();
     await checkQrStatus(orderId);
-  }catch(e){$('utrMsg').innerHTML='<div class="error">'+esc(e.message)+'</div>';$('utrBtn').disabled=false;resetTurnstile();}
+  }catch(e){
+    const msg=String(e.message||'UTR submit failed');
+    const stockRetry=msg.includes('स्टॉक में हैं')||msg.includes('INSUFFICIENT_STOCK');
+    const invalidUtr=msg.includes('INVALID UTR')||msg.includes('UTR_ALREADY_USED');
+    $('utrMsg').innerHTML=stockRetry
+      ? '<div class="error stock-retry-message"><b>⚠️ अभी पर्याप्त स्टॉक नहीं है</b><br>'+esc(msg)+'<br><b>स्टॉक उपलब्ध होने पर इसी UTR को फिर से सबमिट करें।</b></div>'
+      : invalidUtr
+        ? '<div class="error invalid-utr-retry"><b>⚠️ INVALID UTR — ऑर्डर Reject नहीं हुआ</b><br>'+esc(msg)+'<br><b>सही UTR डालकर फिर से Submit UTR दबाएँ।</b></div>'
+        : '<div class="error">'+esc(msg)+'</div>';
+    $('utrBtn').disabled=false;
+    resetTurnstile();
+  }
 }
 async function checkQrStatus(orderId){
   try{

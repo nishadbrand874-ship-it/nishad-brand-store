@@ -187,3 +187,10 @@ Find ID panel heading is now “Enter your Bank UTR / RRN Number”; the extra h
 - UTR submit करने के बाद payment verified और approved होते ही customer सीधे Find ID panel पर जाएगा.
 - Submitted UTR Find ID input में भर दिया जाएगा; customer Fetch IDs दबाकर उसी approved purchase की ID/password देख सकता है.
 - Find ID API केवल approved/paid order की credentials लौटाती है; pending/rejected order पर credentials नहीं मिलते.
+
+
+### INVALID UTR retry behavior
+- UTR submit करने से पहले Merchant Verify app में UTR और amount match होना ज़रूरी है.
+- App में UTR न मिले या amount match न हो तो `INVALID UTR` दिखेगा; order reject नहीं होगा, UTR save नहीं होगा और stock reserve नहीं होगा.
+- ग्राहक सही UTR डालकर दोबारा Submit UTR कर सकता है. ID केवल valid matching payment और approval के बाद release होगी.
+- अगर payment SMS ऐप में अभी sync नहीं हुआ है, तो SMS आने तक इंतज़ार करके दोबारा कोशिश करें.

@@ -287,7 +287,7 @@ app.get('/api/config', async (req,res)=>{
   res.set('Pragma','no-cache');
   try {
     const s=await settings();
-    const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
+    const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available' AND reserved_order_id IS NULL");
     res.json(publicSettings(s, stock.rows[0].count));
   } catch(e){ console.error('Config error:',e); res.status(500).json({error:'Server error'}); }
 });
@@ -308,7 +308,7 @@ app.get('/api/admin/me',auth,(req,res)=>res.json({ok:true}));
 app.get('/api/admin/dashboard',auth,async(req,res)=>{
   res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
   const s=await settings();
-  const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
+  const stock=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available' AND reserved_order_id IS NULL");
   const sold=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='sold'");
   const orders=await q("SELECT order_id,package_qty,amount_paise,status,payment_id,utr,customer_name,customer_phone,created_at,fulfilled_at,claim_used_at,claim_requested_at,claim_status FROM orders ORDER BY created_at DESC LIMIT 100");
   const inv=await q("SELECT id,status,sold_order_id,created_at FROM inventory ORDER BY id DESC LIMIT 500");
@@ -367,6 +367,7 @@ app.post('/api/admin/orders/:orderId/reject',auth,adminMutationGuard,async(req,r
   try{
     const r=await q("UPDATE orders SET status='rejected' WHERE order_id=$1 AND status='payment_received' RETURNING order_id",[req.params.orderId]);
     if(!r.rows[0]) return res.status(400).json({error:'Only pending payment orders can be rejected'});
+    await q("UPDATE inventory SET reserved_order_id=NULL WHERE reserved_order_id=$1 AND status='available'",[req.params.orderId]);
     res.json({ok:true});
   }catch(e){res.status(500).json({error:'Could not reject order'});}
 });
@@ -400,7 +401,7 @@ async function createOrder(req,res){
   const discount=Number.isFinite(packageDiscount) && packageDiscount>0 ? Math.min(originalPrice, packageDiscount) : 0;
   const price=Math.max(0, Math.round((originalPrice-discount) * 100) / 100);
   if(!price) return res.status(400).json({error:'Package not configured'});
-  const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available'");
+  const count=await q("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available' AND reserved_order_id IS NULL");
   if(count.rows[0].count<qty) return res.status(409).json({error:'Not enough stock'});
 
   // Merchant UPI VPA extracted from the QR supplied by the store owner.
@@ -476,15 +477,51 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*10
     if(!verifyOrderToken(order,orderToken)) return res.status(403).json({error:'Invalid order session'});
     if(order.status==='approved' || order.status==='paid') return res.json({ok:true,status:'approved',...await getOrderItems(orderId)});
     if(order.status==='rejected') return res.status(400).json({error:'This order was rejected'});
-    if(Date.now() > new Date(order.created_at).getTime()+300000) return res.status(410).json({error:'QR expired. Please start a new order.'});
-    const duplicate=await q('SELECT order_id,status FROM orders WHERE LOWER(utr)=LOWER($1) AND order_id<>$2 LIMIT 1',[utr,orderId]);
-    if(duplicate.rows[0]) return res.status(409).json({error:'This UTR is already submitted for another order'});
-    const r=await q("UPDATE orders SET status='payment_received',utr=$1,utr_submitted_at=NOW() WHERE order_id=$2 AND status='created' RETURNING order_id,utr,package_qty,amount_paise,status,utr_submitted_at",[utr,orderId]);
-    if(!r.rows[0]){
-      const latest=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
-      if(latest.rows[0]?.status==='payment_received') return res.json({ok:true,status:'pending_approval',order:latest.rows[0]});
-      return res.status(400).json({error:'Order cannot accept UTR in its current state'});
+
+    // Match the submitted UTR in Merchant Verify before saving it or reserving stock.
+    // Missing/mismatched UTRs are retryable validation errors, not order rejections.
+    const appVerification=await q('SELECT utr,amount_paise,matched_order_id,match_status FROM merchant_sms_verifications WHERE LOWER(utr)=LOWER($1) LIMIT 1',[utr]);
+    if(!appVerification.rows[0]){
+      return res.status(422).json({code:'INVALID_UTR',error:'INVALID UTR: Merchant Verify app में इस UTR का SMS match नहीं मिला। आपका ऑर्डर Reject नहीं हुआ है। सही UTR डालकर फिर कोशिश करें; अगर पेमेंट अभी-अभी किया है तो ऐप में SMS आने तक थोड़ा इंतज़ार करें।'});
     }
+    const appMatch=appVerification.rows[0];
+    if(Number(appMatch.amount_paise)!==Number(order.amount_paise)){
+      return res.status(422).json({code:'INVALID_UTR_AMOUNT',error:'INVALID UTR / AMOUNT: ऐप में मिली पेमेंट राशि ऑर्डर की राशि से मेल नहीं खाती। ऑर्डर Reject नहीं हुआ है। सही UTR और सही पेमेंट की पुष्टि करके फिर कोशिश करें।'});
+    }
+    if(appMatch.matched_order_id && String(appMatch.matched_order_id)!==orderId && appMatch.match_status==='matched'){
+      return res.status(409).json({code:'UTR_ALREADY_USED',error:'यह UTR पहले ही दूसरे ऑर्डर से match हो चुका है। सही UTR डालकर फिर कोशिश करें।'});
+    }
+
+    // Atomically lock and reserve enough stock while recording the UTR.
+    // This prevents two simultaneous UTR submissions from claiming the same IDs.
+    const client=await pool.connect();
+    let r;
+    try{
+      await client.query('BEGIN');
+      // Serialize stock allocation across concurrent UTR submissions. The row locks
+      // below protect individual inventory records; this transaction-level advisory
+      // lock also makes the available-stock count/message reliable during contention.
+      await client.query('SELECT pg_advisory_xact_lock($1, $2)', [20261023, 1]);
+      const locked=await client.query("SELECT id FROM inventory WHERE status='available' AND reserved_order_id IS NULL ORDER BY id ASC LIMIT $1 FOR UPDATE SKIP LOCKED",[Number(order.package_qty||0)]);
+      const requestedQty=Number(order.package_qty||0);
+      if(locked.rows.length<requestedQty){
+        const stock=await client.query("SELECT COUNT(*)::int AS count FROM inventory WHERE status='available' AND reserved_order_id IS NULL");
+        const availableStock=Number(stock.rows[0]?.count||0);
+        await client.query('ROLLBACK');
+        return res.status(409).json({code:'INSUFFICIENT_STOCK',availableStock,requestedQty,error:`अभी केवल ${availableStock} ID स्टॉक में हैं, जबकि आपने ${requestedQty} ID का पेमेंट किया है। आपका UTR अभी सेव नहीं हुआ है। स्टॉक आने पर इसी UTR को दोबारा सबमिट करें।`});
+      }
+      const duplicate=await client.query('SELECT order_id,status FROM orders WHERE LOWER(utr)=LOWER($1) AND order_id<>$2 LIMIT 1',[utr,orderId]);
+      if(duplicate.rows[0]){await client.query('ROLLBACK');return res.status(409).json({error:'This UTR is already submitted for another order'});}
+      r=await client.query("UPDATE orders SET status='payment_received',utr=$1,utr_submitted_at=NOW() WHERE order_id=$2 AND status='created' RETURNING order_id,utr,package_qty,amount_paise,status,utr_submitted_at",[utr,orderId]);
+      if(!r.rows[0]){
+        await client.query('ROLLBACK');
+        const latest=await q('SELECT * FROM orders WHERE order_id=$1',[orderId]);
+        if(latest.rows[0]?.status==='payment_received') return res.json({ok:true,status:'pending_approval',order:latest.rows[0]});
+        return res.status(400).json({error:'Order cannot accept UTR in its current state'});
+      }
+      for(const item of locked.rows) await client.query("UPDATE inventory SET reserved_order_id=$1 WHERE id=$2 AND status='available' AND reserved_order_id IS NULL",[orderId,item.id]);
+      await client.query('COMMIT');
+    }catch(txError){try{await client.query('ROLLBACK')}catch{};throw txError;}finally{client.release();}
     // If the Merchant Verify phone already received this UTR, reconcile it now.
     const sms=await q('SELECT * FROM merchant_sms_verifications WHERE LOWER(utr)=LOWER($1) LIMIT 1',[utr]);
     if(sms.rows[0]){
@@ -492,6 +529,7 @@ app.post('/api/orders/:orderId/utr', utrCloudflareGuard, rateLimit(apiHits,60*10
       if(Number(sv.amount_paise)!==Number(r.rows[0].amount_paise)){
         await q("UPDATE merchant_sms_verifications SET matched_order_id=$1,match_status='amount_mismatch' WHERE id=$2",[orderId,sv.id]);
         await q("UPDATE orders SET status='rejected',sms_amount_paise=$1,sms_match_source='merchant_app_amount_mismatch' WHERE order_id=$2 AND status='payment_received'",[sv.amount_paise,orderId]);
+        await q("UPDATE inventory SET reserved_order_id=NULL WHERE reserved_order_id=$1 AND status='available'",[orderId]);
         return res.status(409).json({ok:false,status:'rejected',order:r.rows[0],message:'Payment amount does not match. Order rejected; no ID was released.'});
       }
       await q("UPDATE orders SET sms_verified_at=NOW(),sms_amount_paise=$1,sms_match_source='merchant_sms_app' WHERE order_id=$2 AND status='payment_received'",[sv.amount_paise,orderId]);
@@ -570,11 +608,12 @@ app.get('/api/payment/qr-status/:orderId', rateLimit(apiHits,60*1000,60), async(
 const UTR_VERIFY_WINDOW_MS = 90 * 1000;
 async function autoRejectUnverifiedOrders(){
   try{
-    await q(`UPDATE orders SET status='rejected'
+    const r=await q(`UPDATE orders SET status='rejected'
       WHERE status='payment_received'
         AND utr IS NOT NULL
         AND sms_verified_at IS NULL
-        AND COALESCE(utr_submitted_at, created_at) < NOW() - INTERVAL '90 seconds'`);
+        AND COALESCE(utr_submitted_at, created_at) < NOW() - INTERVAL '90 seconds' RETURNING order_id`);
+    for(const row of r.rows) await q("UPDATE inventory SET reserved_order_id=NULL WHERE reserved_order_id=$1 AND status='available'",[row.order_id]);
   }catch(e){ console.error('Auto reject unverified UTRs:',e.message); }
 }
 setInterval(autoRejectUnverifiedOrders, 15000);
@@ -588,7 +627,7 @@ async function fulfillManual(orderId){
     if(ord.rows[0].status==='approved' || ord.rows[0].status==='paid'){ await client.query('COMMIT'); return; }
     if(ord.rows[0].status!=='payment_received' || !ord.rows[0].utr) throw new Error('UTR/payment is still pending');
     if(!ord.rows[0].sms_verified_at || Number(ord.rows[0].sms_amount_paise)!==Number(ord.rows[0].amount_paise)) throw new Error('Payment SMS verification is required before ID release');
-    const items=await client.query("SELECT id FROM inventory WHERE status='available' ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $1",[ord.rows[0].package_qty]);
+    const items=await client.query("SELECT id FROM inventory WHERE status='available' AND reserved_order_id=$1 ORDER BY id ASC FOR UPDATE SKIP LOCKED",[orderId]);
     if(items.rows.length<ord.rows[0].package_qty){ await client.query('ROLLBACK'); throw new Error('Insufficient stock at fulfillment'); }
     for(const item of items.rows){
       await client.query("UPDATE inventory SET status='sold',sold_order_id=$1,reserved_order_id=NULL WHERE id=$2",[orderId,item.id]);
