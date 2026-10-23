@@ -156,7 +156,7 @@ async function submitUTR(){
     $('utrMsg').innerHTML=stockRetry
       ? '<div class="error stock-retry-message"><b>⚠️ अभी पर्याप्त स्टॉक नहीं है</b><br>'+esc(msg)+'<br><b>स्टॉक उपलब्ध होने पर इसी UTR को फिर से सबमिट करें।</b></div>'
       : invalidUtr
-        ? '<div class="error invalid-utr-retry"><b>⚠️ INVALID UTR — ऑर्डर Reject नहीं हुआ</b><br>'+esc(msg)+'<br><b>सही UTR डालकर फिर से Submit UTR दबाएँ।</b></div>'
+        ? '<div class="error invalid-utr-retry"><b>⚠️ INVALID UTR</b><br><b>सही UTR डालकर फिर कोशिश करें।</b></div>'
         : '<div class="error">'+esc(msg)+'</div>';
     $('utrBtn').disabled=false;
     resetTurnstile();

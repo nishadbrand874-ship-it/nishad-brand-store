@@ -1213,3 +1213,7 @@ body.manage-view #utrCheckSection .utr-fetch-button span:last-child{display:inli
   #utrCheckSection .utr-redesign-input, #utrCheckSection .utr-fetch-button { min-height: 40px !important; font-size: 13px !important; }
   #utrCheckSection .find-credentials-result { padding: 9px !important; }
 }
+
+/* Clear, compact invalid-UTR feedback */
+.invalid-utr-retry{background:linear-gradient(135deg,#fff7ed 0%,#fff1f2 100%);border:1px solid #fb7185!important;border-left:5px solid #e11d48!important;border-radius:14px!important;color:#9f1239!important;padding:14px 16px!important;line-height:1.5;box-shadow:0 5px 18px rgba(225,29,72,.09)}
+.invalid-utr-retry b{color:#be123c!important}
